@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: lg-cns-abm
+    runtime: docker
+    dockerfilePath: ./LG_CNS_VNB_ABM/abm_ver2/Dockerfile
+    dockerContext: ./LG_CNS_VNB_ABM/abm_ver2
+    plan: free
+    region: singapore
