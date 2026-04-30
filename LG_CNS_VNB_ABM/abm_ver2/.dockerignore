@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+.pytest_cache
+node_modules
+.git
+*.md
+make.js
+package.json
+package-lock.json
+prism_abm_final.docx
+doc-images
+uploads
+*.bak

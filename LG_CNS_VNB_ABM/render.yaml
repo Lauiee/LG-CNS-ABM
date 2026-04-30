@@ -1,0 +1,11 @@
+# Render: New → Blueprint → 이 저장소 연결 (루트에 render.yaml 있으면 감지)
+# 무료 Web Service는 일정 시간 요청 없으면 슬립 → 첫 접속이 느릴 수 있음. 상시 응답이면 유료 플랜 권장.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: lg-cns-abm
+    runtime: docker
+    dockerfilePath: ./abm_ver2/Dockerfile
+    dockerContext: ./abm_ver2
+    plan: free
+    region: singapore

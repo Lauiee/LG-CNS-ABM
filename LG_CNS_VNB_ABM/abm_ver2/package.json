@@ -1,0 +1,8 @@
+{
+  "name": "lg-cns-abm-doc",
+  "private": true,
+  "description": "make.js — prism_abm_final.docx 생성",
+  "dependencies": {
+    "docx": "^9.5.1"
+  }
+}

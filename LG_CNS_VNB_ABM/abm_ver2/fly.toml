@@ -1,0 +1,19 @@
+# Fly.io: abm_ver2 폴더에서 `fly launch` 후 `fly deploy`
+# https://fly.io/docs/languages-and-frameworks/docker/
+app = "lg-cns-abm"
+primary_region = "nrt"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1
+  processes = ["app"]
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

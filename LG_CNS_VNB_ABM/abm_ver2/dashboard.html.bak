@@ -1,0 +1,2843 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ABM</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0c10;
+        --surface: #111318;
+        --surface2: #181c24;
+        --border: #1e2330;
+        --border2: #2a3040;
+        --text: #e2e8f0;
+        --text2: #a7b2c3;
+        --text3: #718197;
+        --accent: #3b82f6;
+        --accent2: #06b6d4;
+        --green: #10b981;
+        --amber: #f59e0b;
+        --red: #ef4444;
+        --purple: #8b5cf6;
+        --mono: "IBM Plex Mono", monospace;
+        --sans: "IBM Plex Sans KR", sans-serif;
+      }
+
+      html.light {
+        --bg: #f4f6fb;
+        --surface: #ffffff;
+        --surface2: #edf0f7;
+        --border: #dde2ee;
+        --border2: #c4cde0;
+        --text: #111827;
+        --text2: #374151;
+        --text3: #6b7280;
+        --accent: #2563eb;
+        --accent2: #0891b2;
+        --green: #059669;
+        --amber: #d97706;
+        --red: #dc2626;
+        --purple: #7c3aed;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.5;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      /* ── 헤더 ── */
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 32px;
+        height: 56px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo-mark {
+        width: 28px;
+        height: 28px;
+        background: var(--accent);
+        clip-path: polygon(
+          50% 0%,
+          100% 25%,
+          100% 75%,
+          50% 100%,
+          0% 75%,
+          0% 25%
+        );
+      }
+
+      .logo-text {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: var(--text);
+      }
+
+      .logo-sub {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text2);
+        letter-spacing: 0.05em;
+      }
+
+      .header-status {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .status-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text2);
+      }
+
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--text3);
+      }
+
+      .status-dot.running {
+        background: var(--green);
+        animation: pulse 1.5s infinite;
+      }
+      .status-dot.ready {
+        background: var(--accent);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      /* ── 레이아웃 ── */
+      .layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        height: calc(100vh - 56px);
+      }
+
+      /* ── 사이드바 ── */
+      aside {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        padding: 24px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+
+      .panel-title {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        color: var(--text3);
+        text-transform: uppercase;
+        margin-bottom: 14px;
+      }
+
+      .param-group {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .param-item label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        color: var(--text2);
+        margin-bottom: 6px;
+      }
+
+      .param-item label span {
+        font-family: var(--mono);
+        color: var(--accent2);
+        font-size: 12px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        height: 2px;
+        appearance: none;
+        background: var(--border2);
+        border-radius: 2px;
+        outline: none;
+        cursor: pointer;
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 12px;
+        height: 12px;
+        background: var(--accent);
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid var(--bg);
+        transition: transform 0.15s;
+      }
+
+      input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.3);
+      }
+
+      .btn-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      button {
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        padding: 11px 16px;
+        border: 1px solid var(--border2);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.15s;
+        text-align: center;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+
+      .btn-primary:hover {
+        background: #2563eb;
+      }
+
+      .btn-secondary {
+        background: transparent;
+        color: var(--text2);
+      }
+
+      .btn-secondary:hover {
+        background: var(--surface2);
+        color: var(--text);
+        border-color: var(--accent);
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: var(--text3);
+        border-color: var(--border);
+        font-size: 12px;
+        padding: 7px 12px;
+      }
+
+      .btn-ghost:hover {
+        color: var(--text2);
+        border-color: var(--border2);
+      }
+
+      /* 진행 바 */
+      .progress-container {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 12px 14px;
+      }
+
+      .progress-label {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text2);
+        margin-bottom: 8px;
+      }
+
+      .progress-bar-bg {
+        height: 3px;
+        background: var(--border2);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), var(--accent2));
+        border-radius: 2px;
+        transition: width 0.3s ease;
+        width: 0%;
+      }
+
+      .sprint-indicator {
+        display: flex;
+        gap: 4px;
+        margin-top: 8px;
+      }
+
+      .sprint-pip {
+        flex: 1;
+        height: 3px;
+        background: var(--border2);
+        border-radius: 2px;
+        transition: background 0.3s;
+      }
+
+      .sprint-pip.done {
+        background: var(--accent);
+      }
+      .sprint-pip.current {
+        background: var(--accent2);
+        animation: pulse 1s infinite;
+      }
+
+      /* ── 메인 콘텐츠 ── */
+      main {
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        overflow: hidden;
+      }
+
+      /* ── 실시간 상태 바 ── */
+      .sim-status-bar {
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+        padding: 0 16px;
+        height: 44px;
+      }
+
+      .bar-label {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: var(--text3);
+        padding-right: 16px;
+        border-right: 1px solid var(--border);
+        margin-right: 16px;
+        white-space: nowrap;
+      }
+
+      .prism-label {
+        color: var(--accent2);
+      }
+
+      .status-cell {
+        display: flex;
+        flex-direction: column;
+        padding: 0 14px;
+        border-right: 1px solid var(--border);
+      }
+
+      .status-label {
+        font-family: var(--mono);
+        font-size: 8px;
+        color: var(--text3);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .status-value {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      /* ── PRISM 출력 바 ── */
+      .prism-bar {
+        display: flex;
+        align-items: center;
+        border-bottom: 2px solid var(--accent);
+        background: var(--surface2);
+        padding: 0 16px;
+        height: 52px;
+      }
+
+      .prism-bar .metric-cell {
+        flex: 1;
+        padding: 0 14px;
+        border-right: 1px solid var(--border);
+      }
+
+      .prism-bar .metric-cell:last-child {
+        border-right: none;
+      }
+
+      .metric-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        color: var(--text3);
+        text-transform: uppercase;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .metric-value {
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+        line-height: 1;
+      }
+
+      .metric-unit {
+        font-size: 10px;
+        color: var(--text2);
+        font-weight: 400;
+        margin-left: 2px;
+      }
+
+      /* ── 전환 버튼 ── */
+      .view-toggle-btn {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 6px 14px;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.15s;
+        letter-spacing: 0.04em;
+      }
+
+      .view-toggle-btn:disabled {
+        background: var(--border2);
+        color: var(--text3);
+        cursor: not-allowed;
+      }
+
+      .view-toggle-btn:hover:not(:disabled) {
+        background: #2563eb;
+      }
+
+      /* ── PRISM 결과 화면 ── */
+      #prismResultView {
+        display: none;
+        position: fixed;
+        top: 56px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--bg);
+        z-index: 50;
+        overflow-y: auto;
+        padding: 40px;
+      }
+
+      #prismResultView.visible {
+        display: block;
+        animation: slideIn 0.25s ease;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .prism-result-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 40px;
+      }
+
+      .prism-result-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--text3);
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+
+      .prism-result-name {
+        font-family: var(--mono);
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .prism-result-sub {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text3);
+        margin-top: 4px;
+      }
+
+      .back-btn {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 10px 20px;
+        background: transparent;
+        color: var(--text2);
+        border: 1px solid var(--border2);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .back-btn:hover {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+
+      .prism-cards {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 40px;
+      }
+
+      .prism-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 24px;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s;
+      }
+
+      .prism-card:hover {
+        border-color: var(--border2);
+      }
+
+      .prism-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--card-accent, var(--accent));
+      }
+
+      .prism-card-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--text3);
+        text-transform: uppercase;
+        margin-bottom: 12px;
+      }
+
+      .prism-card-value {
+        font-family: var(--mono);
+        font-size: 36px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1;
+        margin-bottom: 4px;
+      }
+
+      .prism-card-unit {
+        font-size: 14px;
+        color: var(--text2);
+        font-weight: 400;
+      }
+
+      .prism-card-bench {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        margin-top: 8px;
+      }
+
+      .bench-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 600;
+        margin-left: 6px;
+      }
+
+      .bench-elite {
+        background: #0d3321;
+        color: #10b981;
+      }
+      .bench-high {
+        background: #1a2e1a;
+        color: #4ade80;
+      }
+      .bench-medium {
+        background: #2d2200;
+        color: #f59e0b;
+      }
+      .bench-low {
+        background: #2d0f0f;
+        color: #ef4444;
+      }
+      .bench-p90 {
+        background: #0d3321;
+        color: #10b981;
+      }
+      .bench-p75 {
+        background: #1a2e1a;
+        color: #4ade80;
+      }
+      .bench-p50 {
+        background: #2d2200;
+        color: #f59e0b;
+      }
+      .bench-below {
+        background: #2d0f0f;
+        color: #ef4444;
+      }
+
+      html.light .bench-elite {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      html.light .bench-high {
+        background: #dcfce7;
+        color: #166534;
+      }
+      html.light .bench-medium {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      html.light .bench-low {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      html.light .bench-p90 {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      html.light .bench-p75 {
+        background: #dcfce7;
+        color: #166534;
+      }
+      html.light .bench-p50 {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      html.light .bench-below {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .baseline-note {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text3);
+        line-height: 1.6;
+        margin-bottom: 12px;
+      }
+
+      .baseline-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .baseline-item label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+        color: var(--text2);
+        margin-bottom: 4px;
+      }
+
+      .baseline-source {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--text3);
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        padding: 1px 5px;
+        flex-shrink: 0;
+      }
+
+      .baseline-item input {
+        width: 100%;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text);
+        outline: none;
+        transition: border-color 0.15s;
+        box-sizing: border-box;
+      }
+
+      .baseline-item input:focus {
+        border-color: var(--accent);
+      }
+      .baseline-item input::placeholder {
+        color: var(--text3);
+      }
+
+      .delta-positive {
+        color: #10b981;
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+      .delta-negative {
+        color: #ef4444;
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+      .delta-neutral {
+        color: var(--text3);
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+
+      .bench-source {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--text3);
+        margin-right: 4px;
+      }
+
+      .prism-params {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 24px;
+      }
+
+      .prism-params-title {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: var(--text3);
+        text-transform: uppercase;
+        margin-bottom: 16px;
+      }
+
+      .prism-params-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+
+      .param-chip {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .param-chip-label {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--text3);
+        letter-spacing: 0.06em;
+      }
+
+      .param-chip-value {
+        font-family: var(--mono);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--accent2);
+      }
+
+      /* ── Agent 시각화 영역 ── */
+      .viz-area {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        overflow: hidden;
+      }
+
+      /* Agent 그리드 */
+      .agent-stage {
+        background: var(--bg);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+      }
+
+      .agent-stage::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(var(--border) 1px, transparent 1px),
+          linear-gradient(90deg, var(--border) 1px, transparent 1px);
+        background-size: 40px 40px;
+        opacity: 0.3;
+      }
+
+      .agent-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        justify-content: center;
+        align-items: flex-end;
+        position: relative;
+        z-index: 1;
+        max-width: 600px;
+      }
+
+      /* 개발자 인물 카드 */
+      .dev-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: transform 0.2s;
+        position: relative;
+      }
+
+      .dev-card:hover {
+        transform: translateY(-4px);
+      }
+
+      .dev-card:hover .dev-tooltip {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .dev-figure-frame {
+        width: 104px;
+        height: 116px;
+        border-radius: 14px;
+        border: 1px solid var(--border2);
+        background:
+          radial-gradient(
+            circle at 24% 18%,
+            rgba(59, 130, 246, 0.22),
+            rgba(59, 130, 246, 0) 52%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(24, 28, 36, 0.96),
+            rgba(12, 15, 21, 0.96)
+          );
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.05),
+          0 8px 18px rgba(0, 0, 0, 0.45);
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+
+      .dev-card:hover .dev-figure-frame {
+        border-color: var(--accent);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.06),
+          0 10px 24px rgba(0, 0, 0, 0.52);
+      }
+
+      .dev-tooltip {
+        position: absolute;
+        bottom: calc(100% + 10px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--surface2);
+        border: 1px solid var(--border2);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text2);
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s;
+        z-index: 10;
+        min-width: 140px;
+      }
+
+      .dev-tooltip .tt-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        line-height: 1.8;
+      }
+
+      .dev-tooltip .tt-val {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      /* SVG 인물 */
+      .dev-figure {
+        width: 92px;
+        height: 102px;
+        position: relative;
+      }
+
+      .dev-figure svg {
+        width: 100%;
+        height: 100%;
+        filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+        transition: filter 0.3s;
+      }
+
+      .dev-card.state-FlowCoding .dev-figure svg {
+        filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.7));
+      }
+
+      .dev-card.state-Burnout .dev-figure svg {
+        filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.6)) grayscale(0.5);
+      }
+
+      .dev-card.state-Interrupted .dev-figure svg {
+        filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6));
+      }
+
+      /* 에너지 바 */
+      .energy-bar {
+        width: 62px;
+        height: 4px;
+        background: var(--border2);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      .energy-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition:
+          width 0.5s ease,
+          background 0.3s;
+      }
+
+      /* 상태 배지 */
+      .state-badge {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text3);
+        transition: color 0.3s;
+      }
+
+      .dev-id {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+      }
+
+      /* PL 카드 스타일 */
+      .dev-card.is-pl .dev-figure svg {
+        filter: drop-shadow(0 0 16px rgba(139, 92, 246, 0.5));
+      }
+
+      /* ── 우측 차트 패널 ── */
+      .chart-panel {
+        border-left: 1px solid var(--border);
+        background: var(--surface);
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .chart-block {
+      }
+
+      .chart-title {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        color: var(--text3);
+        text-transform: uppercase;
+        margin-bottom: 10px;
+      }
+
+      canvas.sparkline {
+        width: 100%;
+        height: 80px;
+        display: block;
+      }
+
+      .mini-metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .mini-card {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 10px;
+      }
+
+      .mini-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      }
+
+      .mini-val {
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      /* 팀 상태 히트맵 */
+      .state-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text2);
+      }
+
+      .legend-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      /* 로그 */
+      .event-log {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text2);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 120px;
+        overflow-y: auto;
+      }
+
+      .log-line {
+        display: flex;
+        gap: 8px;
+        opacity: 0;
+        animation: fadeIn 0.3s forwards;
+      }
+
+      @keyframes fadeIn {
+        to {
+          opacity: 1;
+        }
+      }
+
+      .log-step {
+        color: var(--text3);
+        min-width: 40px;
+      }
+      .log-msg {
+        color: var(--text2);
+      }
+      .log-msg.warn {
+        color: var(--amber);
+      }
+      .log-msg.danger {
+        color: var(--red);
+      }
+      .log-msg.success {
+        color: var(--green);
+      }
+
+      /* ── 하단 타임라인 ── */
+      .timeline-bar {
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        padding: 12px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .timeline-steps {
+        display: flex;
+        gap: 3px;
+        flex: 1;
+      }
+
+      .step-pip {
+        flex: 1;
+        height: 20px;
+        border-radius: 2px;
+        background: var(--border);
+        cursor: pointer;
+        transition: background 0.2s;
+        position: relative;
+      }
+
+      .step-pip:hover {
+        background: var(--border2);
+      }
+      .step-pip.done {
+        background: var(--surface2);
+        border: 1px solid var(--border2);
+      }
+      .step-pip.current {
+        background: var(--accent);
+      }
+      .step-pip.sprint-end {
+        border-right: 2px solid var(--accent2);
+      }
+
+      .timeline-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text3);
+        white-space: nowrap;
+      }
+
+      /* 스크롤바 */
+      ::-webkit-scrollbar {
+        width: 4px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border2);
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">
+        <div class="logo-mark"></div>
+        <div>
+          <div class="logo-text">HOTL AI Productivity ABM</div>
+          <div class="logo-sub">Productivity Insight & Score Measurement</div>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-badge">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">대기중</span>
+        </div>
+        <div class="status-badge" style="color: var(--text3)">
+          <span id="stepLabel">STEP —/—</span>
+        </div>
+        <div class="status-badge" style="color: var(--text3)">
+          <span id="sprintLabel">SPRINT —/—</span>
+        </div>
+        <button
+          class="theme-toggle"
+          id="themeToggle"
+          onclick="toggleTheme()"
+          title="다크/라이트 모드 전환"
+        >
+          <span id="themeIcon">☀</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- PRISM 결과 화면 (토글 오버레이) -->
+    <div id="prismResultView">
+      <div class="prism-result-header">
+        <div>
+          <div class="prism-result-title">
+            Productivity Insight &amp; Score Measurement
+          </div>
+          <div class="prism-result-name">PRISM Framework Output</div>
+          <div class="prism-result-sub" id="resultSubtitle">
+            — / — Steps · — / — Sprints
+          </div>
+        </div>
+        <button class="back-btn" onclick="toggleView()">
+          ← 시뮬레이션으로 돌아가기
+        </button>
+      </div>
+      <div class="prism-cards" id="prismCards"></div>
+      <div class="prism-params">
+        <div class="prism-params-title">시뮬레이션 파라미터</div>
+        <div class="prism-params-grid" id="prismParamsGrid"></div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- 사이드바 -->
+      <aside>
+        <div>
+          <div class="panel-title">Baseline (현재 측정값)</div>
+          <div class="baseline-note">
+            값 입력 시 시뮬레이션 결과와 비교합니다.<br />데이터 없으면
+            비워두세요.
+          </div>
+          <div class="baseline-group">
+            <div class="baseline-item">
+              <label
+                >PRs per Engineer
+                <span class="baseline-source">DX Core 4</span></label
+              >
+              <input
+                type="number"
+                id="b-prs"
+                placeholder="예: 2.5"
+                step="0.1"
+                min="0"
+              />
+            </div>
+            <div class="baseline-item">
+              <label
+                >Lead Time (steps)
+                <span class="baseline-source">DORA</span></label
+              >
+              <input
+                type="number"
+                id="b-lt"
+                placeholder="예: 5"
+                step="0.5"
+                min="0"
+              />
+            </div>
+            <div class="baseline-item">
+              <label
+                >Deploy Frequency
+                <span class="baseline-source">DORA · DX Core 4</span></label
+              >
+              <input
+                type="number"
+                id="b-df"
+                placeholder="예: 2"
+                step="0.5"
+                min="0"
+              />
+            </div>
+            <div class="baseline-item">
+              <label
+                >Change Failure Rate (%)
+                <span class="baseline-source">DORA · DX Core 4</span></label
+              >
+              <input
+                type="number"
+                id="b-cfr"
+                placeholder="예: 10"
+                step="0.1"
+                min="0"
+                max="100"
+              />
+            </div>
+            <div class="baseline-item">
+              <label
+                >Recovery Time (steps)
+                <span class="baseline-source">DORA</span></label
+              >
+              <input
+                type="number"
+                id="b-rt"
+                placeholder="예: 3"
+                step="0.5"
+                min="0"
+              />
+            </div>
+            <div class="baseline-item">
+              <label
+                >% New Capabilities
+                <span class="baseline-source">DX Core 4</span></label
+              >
+              <input
+                type="number"
+                id="b-nc"
+                placeholder="예: 55"
+                step="1"
+                min="0"
+                max="100"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="height: 1px; background: var(--border); margin: 16px 0"
+        ></div>
+
+        <div>
+          <div class="panel-title">시뮬레이션 파라미터</div>
+          <div class="param-group">
+            <div class="param-item">
+              <label>개발자 수 <span id="v-devs">9</span></label>
+              <input
+                type="range"
+                id="p-devs"
+                min="3"
+                max="20"
+                value="9"
+                oninput="
+                  document.getElementById('v-devs').textContent = this.value
+                "
+              />
+            </div>
+            <div class="param-item">
+              <label>스프린트 수 <span id="v-sprints">6</span></label>
+              <input
+                type="range"
+                id="p-sprints"
+                min="2"
+                max="12"
+                value="6"
+                oninput="
+                  document.getElementById('v-sprints').textContent = this.value
+                "
+              />
+            </div>
+            <div class="param-item">
+              <label>회의 부하 (분/일) <span id="v-meeting">60</span></label>
+              <input
+                type="range"
+                id="p-meeting"
+                min="0"
+                max="240"
+                step="15"
+                value="60"
+                oninput="
+                  document.getElementById('v-meeting').textContent = this.value
+                "
+              />
+            </div>
+            <div class="param-item">
+              <label>리뷰 엄격도 <span id="v-review">0.70</span></label>
+              <input
+                type="range"
+                id="p-review"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value="0.70"
+                oninput="
+                  document.getElementById('v-review').textContent = (+this
+                    .value).toFixed(2)
+                "
+              />
+            </div>
+            <div class="param-item">
+              <label
+                >코드베이스 안정성 <span id="v-stability">0.80</span></label
+              >
+              <input
+                type="range"
+                id="p-stability"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value="0.80"
+                oninput="
+                  document.getElementById('v-stability').textContent = (+this
+                    .value).toFixed(2)
+                "
+              />
+            </div>
+            <div class="param-item">
+              <label>협업 성향 <span id="v-collab">0.60</span></label>
+              <input
+                type="range"
+                id="p-collab"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value="0.60"
+                oninput="
+                  document.getElementById('v-collab').textContent = (+this
+                    .value).toFixed(2)
+                "
+              />
+            </div>
+            <div class="param-item">
+              <label>요구사항 명확도 <span id="v-req">0.70</span></label>
+              <input
+                type="range"
+                id="p-req"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value="0.70"
+                oninput="
+                  document.getElementById('v-req').textContent = (+this
+                    .value).toFixed(2)
+                "
+              />
+            </div>
+            <div class="param-item">
+              <label>랜덤 시드 <span id="v-seed">42</span></label>
+              <input
+                type="range"
+                id="p-seed"
+                min="1"
+                max="999"
+                value="42"
+                oninput="
+                  document.getElementById('v-seed').textContent = this.value
+                "
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn-primary" onclick="runSimulation()">
+            ▶ 시뮬레이션 실행
+          </button>
+          <button
+            class="btn-secondary"
+            onclick="playAnimation()"
+            id="playBtn"
+            disabled
+          >
+            ⏵ 애니메이션 재생
+          </button>
+          <button
+            class="btn-ghost"
+            onclick="jumpToStep(0)"
+            id="resetBtn"
+            disabled
+          >
+            ↩ 처음으로
+          </button>
+        </div>
+
+        <div class="progress-container">
+          <div class="progress-label">
+            <span>진행률</span>
+            <span id="progressPct">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progressFill"></div>
+          </div>
+          <div class="sprint-indicator" id="sprintPips"></div>
+        </div>
+
+        <div>
+          <div class="panel-title">팀 상태 범례</div>
+          <div class="state-legend">
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #3b82f6"></div>
+              Coding
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #10b981"></div>
+              FlowCoding
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #f59e0b"></div>
+              Reviewing
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #06b6d4"></div>
+              Comm
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #f59e0b"></div>
+              Interrupted
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #ef4444"></div>
+              Burnout
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #4a5568"></div>
+              Idle
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #8b5cf6"></div>
+              PL
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 메인 -->
+      <main>
+        <!-- 줄 1: 실시간 시뮬레이션 상태 -->
+        <div class="sim-status-bar">
+          <div class="bar-label">SIMULATION</div>
+          <div class="status-cell">
+            <div class="status-label">Active Devs</div>
+            <div class="status-value" id="rt-devs">—</div>
+          </div>
+          <div class="status-cell">
+            <div class="status-label">Avg Energy</div>
+            <div class="status-value" id="rt-energy">—</div>
+          </div>
+          <div class="status-cell">
+            <div class="status-label">Avg Motivation</div>
+            <div class="status-value" id="rt-motivation">—</div>
+          </div>
+          <div class="status-cell">
+            <div class="status-label">Total PRs</div>
+            <div class="status-value" id="rt-prs">—</div>
+          </div>
+          <div class="status-cell">
+            <div class="status-label">Deployments</div>
+            <div class="status-value" id="rt-deploys">—</div>
+          </div>
+          <div class="status-cell">
+            <div class="status-label">Incidents</div>
+            <div
+              class="status-value"
+              id="rt-incidents"
+              style="color: var(--red)"
+            >
+              —
+            </div>
+          </div>
+          <button
+            class="view-toggle-btn"
+            id="toggleViewBtn"
+            onclick="toggleView()"
+            disabled
+          >
+            📊 HOTL ABM 결과 보기
+          </button>
+        </div>
+
+        <!-- 줄 2: PRISM Framework Output -->
+        <div class="prism-bar">
+          <div class="bar-label prism-label">PRISM OUTPUT</div>
+          <div class="metric-cell">
+            <div class="metric-label">PRs / Engineer</div>
+            <div class="metric-value" id="m-prs">—</div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Lead Time</div>
+            <div class="metric-value" id="m-lt">
+              —<span class="metric-unit">step</span>
+            </div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Deploy Freq</div>
+            <div class="metric-value" id="m-df">
+              —<span class="metric-unit">/sprint</span>
+            </div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Change Fail Rate</div>
+            <div class="metric-value" id="m-cfr">
+              —<span class="metric-unit">%</span>
+            </div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Recovery Time</div>
+            <div class="metric-value" id="m-rt">
+              —<span class="metric-unit">step</span>
+            </div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">New Capability</div>
+            <div class="metric-value" id="m-nc">
+              —<span class="metric-unit">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="viz-area">
+          <!-- Agent 스테이지 -->
+          <div class="agent-stage">
+            <div class="agent-grid" id="agentGrid">
+              <div
+                style="
+                  font-family: var(--mono);
+                  font-size: 12px;
+                  color: var(--text3);
+                "
+              >
+                파라미터를 설정하고 시뮬레이션을 실행하세요
+              </div>
+            </div>
+          </div>
+
+          <!-- 차트 패널 -->
+          <div class="chart-panel">
+            <div class="chart-block">
+              <div class="chart-title">Team Energy</div>
+              <canvas class="sparkline" id="chartEnergy"></canvas>
+            </div>
+            <div class="chart-block">
+              <div class="chart-title">Team Motivation</div>
+              <canvas class="sparkline" id="chartMotivation"></canvas>
+            </div>
+            <div class="chart-block">
+              <div class="chart-title">Cumulative PRs</div>
+              <canvas class="sparkline" id="chartPRs"></canvas>
+            </div>
+
+            <div class="chart-block">
+              <div class="chart-title">Event Log</div>
+              <div class="event-log" id="eventLog">
+                <div class="log-line" style="opacity: 0.4">
+                  <span class="log-step">—</span>
+                  <span class="log-msg">시뮬레이션 대기중...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 타임라인 -->
+        <div class="timeline-bar">
+          <span class="timeline-label">TIMELINE</span>
+          <div class="timeline-steps" id="timelineSteps"></div>
+          <span class="timeline-label" id="timelineInfo">— / — steps</span>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // ── 상태 색상 ──
+      const STATE_COLORS = {
+        Coding: "#3b82f6",
+        FlowCoding: "#10b981",
+        Reviewing: "#f59e0b",
+        Communicating: "#06b6d4",
+        Learning: "#06b6d4",
+        Interrupted: "#f59e0b",
+        Burnout: "#ef4444",
+        Idle: "#4a5568",
+        Standup: "#8b5cf6",
+        Planning: "#8b5cf6",
+        TaskAssigning: "#8b5cf6",
+        Coaching: "#8b5cf6",
+        Retrospective: "#8b5cf6",
+      };
+
+      // ── 인물 SVG 생성 — hex badge style ──
+      function devSVG(agent) {
+        const state = agent.state;
+        const base = agent.is_pl ? "#8b5cf6" : STATE_COLORS[state] || "#4a5568";
+        const energy = agent.energy;
+        const att = agent.attrited;
+        const flow = state === "FlowCoding";
+        const burnout = state === "Burnout";
+        const inter = state === "Interrupted";
+        const tired = energy < 38 && !burnout && !att;
+        const id = agent.id;
+
+        const sc = flow
+          ? "#10b981"
+          : burnout
+            ? "#ef4444"
+            : inter
+              ? "#f59e0b"
+              : base;
+        const skinL = att ? "#444" : "#e2a46e";
+        const skinM = att ? "#2e2e2e" : "#c07840";
+        const skinD = att ? "#1a1a1a" : "#965c28";
+        const hair = att ? "#181818" : "#180e06";
+        const tilt = tired ? "rotate(9,60,42)" : flow ? "rotate(-5,60,42)" : "";
+        // hex badge: pointy-top, center (60,64), r=48
+        const HX = "60,16 101.6,40 101.6,88 60,112 18.4,88 18.4,40";
+        // corner tick endpoints (outward 5px from each vertex)
+        const ticks = [
+          [60, 16, 60, 11], // top
+          [101.6, 40, 105.9, 37.5], // TR
+          [101.6, 88, 105.9, 90.5], // BR
+          [60, 112, 60, 117], // bottom
+          [18.4, 88, 14.1, 90.5], // BL
+          [18.4, 40, 14.1, 37.5], // TL
+        ]
+          .map(
+            ([x1, y1, x2, y2]) =>
+              `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${sc}" stroke-width="2" stroke-linecap="round" opacity="${att ? ".15" : ".55"}"/>`,
+          )
+          .join("");
+
+        return `<svg viewBox="0 0 120 132" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+  <defs>
+    <!-- hex badge bg -->
+    <linearGradient id="bg${id}" x1=".3" y1="0" x2=".7" y2="1">
+      <stop offset="0%"   stop-color="#1c2740"/>
+      <stop offset="100%" stop-color="#07101e"/>
+    </linearGradient>
+    <!-- face skin -->
+    <radialGradient id="sk${id}" cx="36%" cy="26%" r="68%">
+      <stop offset="0%"   stop-color="${skinL}"/>
+      <stop offset="52%"  stop-color="${skinM}"/>
+      <stop offset="100%" stop-color="${skinD}"/>
+    </radialGradient>
+    <!-- state ambient inside badge -->
+    <radialGradient id="am${id}" cx="50%" cy="38%" r="62%">
+      <stop offset="0%"   stop-color="${sc}" stop-opacity="${flow ? ".3" : burnout ? ".2" : ".12"}"/>
+      <stop offset="100%" stop-color="${sc}" stop-opacity="0"/>
+    </radialGradient>
+    <!-- suit sheen -->
+    <linearGradient id="sh${id}" x1="0" y1="0" x2=".15" y2="1">
+      <stop offset="0%"   stop-color="white" stop-opacity=".12"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+    <!-- glow blur -->
+    <filter id="gf${id}"  x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5"/></filter>
+    <filter id="gf2${id}" x="-35%" y="-35%" width="170%" height="170%"><feGaussianBlur stdDeviation="2.5"/></filter>
+    <filter id="gf3${id}" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="1.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- clip inside hex -->
+    <clipPath id="hc${id}"><polygon points="${HX}"/></clipPath>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="60" cy="129" rx="35" ry="4.5" fill="rgba(0,0,0,.6)"/>
+
+  <!-- ── HEX BADGE ── -->
+  <!-- outer glow -->
+  <polygon points="${HX}" fill="${sc}" opacity="${att ? "0" : flow ? ".22" : ".08"}" filter="url(#gf${id})"/>
+  <!-- stroke glow -->
+  <polygon points="${HX}" fill="none" stroke="${sc}" stroke-width="4"
+           opacity="${att ? "0" : flow ? ".55" : ".22"}" filter="url(#gf2${id})"/>
+  <!-- hex fill -->
+  <polygon points="${HX}" fill="url(#bg${id})"/>
+  <!-- state ambient -->
+  <polygon points="${HX}" fill="url(#am${id})"/>
+  <!-- inner hex border -->
+  <polygon points="${HX}" fill="none" stroke="${sc}" stroke-width="1.5"
+           opacity="${att ? ".18" : flow ? "1" : ".55"}">
+    ${flow ? '<animate attributeName="stroke-opacity" values="1;.28;1" dur="1.6s" repeatCount="indefinite"/>' : ""}
+  </polygon>
+  <!-- corner ticks (HUD style) -->
+  ${att ? "" : ticks}
+
+  <!-- ── BODY INSIDE HEX ── -->
+  <g clip-path="url(#hc${id})">
+    <!-- suit body -->
+    <path d="M-4,132 L-4,90 Q16,76 38,74 Q43,104 60,108 Q77,104 82,74 Q104,76 124,90 L124,132Z"
+          fill="${sc}" opacity="${att ? ".18" : ".88"}"/>
+    <!-- dark overlay for depth -->
+    <path d="M-4,132 L-4,90 Q16,76 38,74 Q43,104 60,108 Q77,104 82,74 Q104,76 124,90 L124,132Z"
+          fill="#000" opacity=".32"/>
+    <!-- suit sheen -->
+    <path d="M38,74 Q43,104 60,108 Q77,104 82,74 Q70,90 60,93 Q50,90 38,74Z"
+          fill="url(#sh${id})"/>
+    <!-- shirt collar -->
+    <path d="M52,74 L56,64 L60,69 L64,64 L68,74 Q64,79 60,81 Q56,79 52,74Z"
+          fill="${att ? "#141414" : "#f0f0ee"}" opacity="${att ? ".18" : ".95"}"/>
+    <!-- tie -->
+    ${
+      !att && !burnout
+        ? `
+    <path d="M57.5,75 L56.2,93 L60,97.5 L63.8,93 L62.5,75 Q60,78.5 57.5,75Z"
+          fill="${sc}" opacity=".8"/>
+    <path d="M55,74 L57.5,75 L60,78.5 L62.5,75 L65,74 L60,69Z"
+          fill="${sc}"/>
+    `
+        : ""
+    }
+    <!-- arms -->
+    <path d="M6,92 Q4,114 14,122 Q24,128 38,122 L38,80 Q24,74 6,92Z"
+          fill="${sc}" opacity="${att ? ".14" : ".76"}"/>
+    <path d="M114,92 Q116,114 106,122 Q96,128 82,122 L82,80 Q96,74 114,92Z"
+          fill="${sc}" opacity="${att ? ".14" : ".76"}"/>
+    <path d="M6,92 Q4,114 14,122 Q24,128 38,122 L38,80 Q24,74 6,92Z"
+          fill="#000" opacity=".28"/>
+    <path d="M114,92 Q116,114 106,122 Q96,128 82,122 L82,80 Q96,74 114,92Z"
+          fill="#000" opacity=".28"/>
+    <!-- cuffs -->
+    <rect x="4"  y="116" width="32" height="6" rx="3" fill="${att ? "#111" : "#d0d4e8"}" opacity="${att ? ".1" : ".65"}"/>
+    <rect x="84" y="116" width="32" height="6" rx="3" fill="${att ? "#111" : "#d0d4e8"}" opacity="${att ? ".1" : ".65"}"/>
+    <!-- hands -->
+    <ellipse cx="21" cy="124" rx="12" ry="6" fill="${skinD}" opacity="${att ? ".14" : ".88"}"/>
+    <ellipse cx="99" cy="124" rx="12" ry="6" fill="${skinD}" opacity="${att ? ".14" : ".88"}"/>
+  </g>
+
+  <!-- neck (outside clip so it overlaps body) -->
+  <rect x="55" y="58" width="10" height="20" rx="5" fill="${skinM}" opacity="${att ? ".22" : "1"}"/>
+
+  <!-- ── HEAD ── -->
+  <g transform="${tilt}" opacity="${att ? ".38" : "1"}">
+    <!-- head shape -->
+    <ellipse cx="60" cy="42" rx="22" ry="23" fill="url(#sk${id})"/>
+    <!-- jaw shadow -->
+    <ellipse cx="60" cy="55" rx="16" ry="9" fill="${skinD}" opacity=".22"/>
+    <!-- top-left light -->
+    <ellipse cx="53" cy="34" rx="16" ry="14" fill="white" opacity=".07"/>
+    <!-- cheek blush -->
+    ${
+      !burnout && !att
+        ? `
+    <ellipse cx="44" cy="48" rx="8" ry="6" fill="#d05030" opacity=".08"/>
+    <ellipse cx="76" cy="48" rx="8" ry="6" fill="#d05030" opacity=".08"/>
+    `
+        : ""
+    }
+    <!-- ears -->
+    <ellipse cx="38" cy="42" rx="3.5" ry="5"   fill="${skinD}"/>
+    <ellipse cx="82" cy="42" rx="3.5" ry="5"   fill="${skinD}"/>
+    <ellipse cx="38" cy="42" rx="1.8" ry="2.8" fill="${skinL}" opacity=".38"/>
+    <ellipse cx="82" cy="42" rx="1.8" ry="2.8" fill="${skinL}" opacity=".38"/>
+    <!-- hair -->
+    <path d="M39,38 Q41,18 60,15 Q79,18 81,38 Q76,23 60,21 Q44,23 39,38Z"
+          fill="${hair}" opacity="${att ? ".28" : "1"}"/>
+    <path d="M44,34 Q51,17 60,15 Q69,17 76,34 Q68,20 60,18 Q52,20 44,34Z"
+          fill="${att ? "#2a2a2a" : "#281a0c"}" opacity="${att ? ".14" : ".45"}"/>
+    <!-- sideburns -->
+    <rect x="38" y="38" width="4" height="14" rx="2" fill="${hair}" opacity="${att ? ".18" : ".75"}"/>
+    <rect x="78" y="38" width="4" height="14" rx="2" fill="${hair}" opacity="${att ? ".18" : ".75"}"/>
+
+    <!-- ── EYEBROWS ── -->
+    ${
+      att
+        ? ""
+        : tired
+          ? `
+      <path d="M44,30 Q52,33 59,30" stroke="${hair}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".65"/>
+      <path d="M61,30 Q68,33 76,30" stroke="${hair}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".65"/>
+    `
+          : burnout
+            ? `
+      <path d="M44,29 Q52,25 59,29" stroke="${hair}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M61,29 Q68,25 76,29" stroke="${hair}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    `
+            : flow
+              ? `
+      <path d="M44,28 Q52,24 59,28" stroke="${hair}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M61,28 Q68,24 76,28" stroke="${hair}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    `
+              : `
+      <path d="M44,29 Q52,27 59,29" stroke="${hair}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".82"/>
+      <path d="M61,29 Q68,27 76,29" stroke="${hair}" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".82"/>
+    `
+    }
+
+    <!-- ── EYES ── -->
+    ${
+      att
+        ? `
+      <line x1="45" y1="37" x2="57" y2="46" stroke="#383838" stroke-width="2.8" stroke-linecap="round"/>
+      <line x1="57" y1="37" x2="45" y2="46" stroke="#383838" stroke-width="2.8" stroke-linecap="round"/>
+      <line x1="63" y1="37" x2="75" y2="46" stroke="#383838" stroke-width="2.8" stroke-linecap="round"/>
+      <line x1="75" y1="37" x2="63" y2="46" stroke="#383838" stroke-width="2.8" stroke-linecap="round"/>
+    `
+        : tired
+          ? `
+      <ellipse cx="51" cy="40" rx="6.5" ry="3.5" fill="#100800"/>
+      <ellipse cx="69" cy="40" rx="6.5" ry="3.5" fill="#100800"/>
+      <line x1="44" y1="36" x2="58" y2="36" stroke="${skinD}" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="62" y1="36" x2="76" y2="36" stroke="${skinD}" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="50" cy="41" r="1.8" fill="white" opacity=".28"/>
+      <circle cx="68" cy="41" r="1.8" fill="white" opacity=".28"/>
+    `
+          : burnout
+            ? `
+      <ellipse cx="51" cy="40" rx="6"   ry="6.5" fill="#0e0400"/>
+      <ellipse cx="69" cy="40" rx="6"   ry="6.5" fill="#0e0400"/>
+      <line x1="44" y1="35" x2="58" y2="37.5" stroke="${skinD}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="62" y1="37.5" x2="76" y2="35" stroke="${skinD}" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="50" cy="41" r="2"   fill="white" opacity=".14"/>
+      <circle cx="68" cy="41" r="2"   fill="white" opacity=".14"/>
+    `
+            : flow
+              ? `
+      <ellipse cx="51" cy="40" rx="6.5" ry="7"   fill="#060300"/>
+      <ellipse cx="69" cy="40" rx="6.5" ry="7"   fill="#060300"/>
+      <circle  cx="54" cy="37" r="2.8" fill="white" opacity=".95"/>
+      <circle  cx="72" cy="37" r="2.8" fill="white" opacity=".95"/>
+      <circle  cx="51" cy="42" r="1.8" fill="${sc}"  opacity=".8"/>
+      <circle  cx="69" cy="42" r="1.8" fill="${sc}"  opacity=".8"/>
+      <circle  cx="55" cy="35.5" r="1.2" fill="white" opacity=".6"/>
+      <circle  cx="73" cy="35.5" r="1.2" fill="white" opacity=".6"/>
+    `
+              : `
+      <ellipse cx="51" cy="40" rx="6"   ry="6.5" fill="#100800"/>
+      <ellipse cx="69" cy="40" rx="6"   ry="6.5" fill="#100800"/>
+      <circle  cx="54" cy="37" r="2.5" fill="white" opacity=".88"/>
+      <circle  cx="72" cy="37" r="2.5" fill="white" opacity=".88"/>
+      <circle  cx="56" cy="35.5" r="1.1" fill="white" opacity=".45"/>
+      <circle  cx="74" cy="35.5" r="1.1" fill="white" opacity=".45"/>
+    `
+    }
+
+    <!-- nose (minimal) -->
+    <path d="M58,50 Q55.5,56 57.5,58.5 Q60,60 62.5,58.5 Q64.5,56 62,50"
+          fill="none" stroke="${skinD}" stroke-width="1.1" opacity=".25" stroke-linecap="round"/>
+
+    <!-- ── MOUTH ── -->
+    ${
+      att
+        ? `
+      <line x1="47" y1="58" x2="73" y2="58" stroke="${skinD}" stroke-width="1.8" stroke-linecap="round" opacity=".32"/>
+    `
+        : tired
+          ? `
+      <path d="M47,58 Q60,61 73,58" stroke="${skinD}" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    `
+          : burnout
+            ? `
+      <path d="M48,62 Q60,57 72,62" stroke="#7a2010" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+    `
+            : flow
+              ? `
+      <path d="M48,58 Q60,65 72,58" stroke="#9a5020" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+      <path d="M50,58.5 Q60,64.5 70,58.5" fill="white" opacity=".11"/>
+    `
+              : `
+      <path d="M48,58 Q60,63 72,58" stroke="#985020" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    `
+    }
+
+    <!-- state wash on face -->
+    <ellipse cx="60" cy="42" rx="20" ry="21" fill="${sc}" opacity="${flow ? ".06" : burnout ? ".06" : "0.03"}"/>
+
+    <!-- ── PL GLASSES ── -->
+    ${
+      agent.is_pl
+        ? `
+    <rect x="40" y="35" width="19" height="13" rx="5.5" fill="none" stroke="#8b5cf6" stroke-width="1.6" opacity=".9" filter="url(#gf3${id})"/>
+    <rect x="61" y="35" width="19" height="13" rx="5.5" fill="none" stroke="#8b5cf6" stroke-width="1.6" opacity=".9" filter="url(#gf3${id})"/>
+    <line x1="59" y1="41.5" x2="61" y2="41.5" stroke="#8b5cf6" stroke-width="1.4" opacity=".9"/>
+    <line x1="39" y1="41.5" x2="40" y2="41.5" stroke="#8b5cf6" stroke-width="1.4" opacity=".6"/>
+    <line x1="80" y1="41.5" x2="81" y2="41.5" stroke="#8b5cf6" stroke-width="1.4" opacity=".6"/>
+    <rect x="41" y="36"  width="17" height="11" rx="4.5" fill="#8b5cf6" opacity=".09"/>
+    <rect x="62" y="36"  width="17" height="11" rx="4.5" fill="#8b5cf6" opacity=".09"/>
+    `
+        : ""
+    }
+  </g>
+
+  <!-- ── PL CROWN (above hex) ── -->
+  ${
+    agent.is_pl
+      ? `
+  <g transform="translate(60,12)" filter="url(#gf2${id})">
+    <path d="M-15,4 L-15,-13 L-8,-8.5 L0,-16 L8,-8.5 L15,-13 L15,4Z" fill="#f59e0b" opacity=".55"/>
+  </g>
+  <g transform="translate(60,12)">
+    <path d="M-15,4 L-15,-13 L-8,-8.5 L0,-16 L8,-8.5 L15,-13 L15,4Z" fill="#f59e0b"/>
+    <rect x="-15" y="4" width="30" height="5.5" rx="2.75" fill="#d97706"/>
+    <circle cx="-8"  cy="-10"  r="2.4" fill="white" opacity=".85"/>
+    <circle cx="0"   cy="-13"  r="2.4" fill="white" opacity=".85"/>
+    <circle cx="8"   cy="-10"  r="2.4" fill="white" opacity=".85"/>
+    <circle cx="-8"  cy="-10"  r="1.2" fill="#fff8d0" opacity=".95"/>
+    <circle cx="0"   cy="-13"  r="1.2" fill="#fff8d0" opacity=".95"/>
+    <circle cx="8"   cy="-10"  r="1.2" fill="#fff8d0" opacity=".95"/>
+  </g>
+  `
+      : ""
+  }
+
+  <!-- ── FLOW SPARKS ── -->
+  ${
+    flow
+      ? `
+  <polygon points="${HX}" fill="none" stroke="#10b981" stroke-width="2.5" opacity=".35">
+    <animate attributeName="stroke-opacity" values=".35;.05;.35" dur="1.4s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-width"   values="2.5;5;2.5"    dur="1.4s" repeatCount="indefinite"/>
+  </polygon>
+  <circle cx="110" cy="22" r="3.2" fill="#34d399" opacity=".9">
+    <animate attributeName="cy" values="22;12;22" dur="2s"   repeatCount="indefinite"/>
+    <animate attributeName="opacity" values=".9;.1;.9" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="10"  cy="32" r="2.6" fill="#6ee7b7" opacity=".78">
+    <animate attributeName="cy" values="32;22;32" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values=".78;.1;.78" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="113" cy="56" r="2"   fill="#10b981" opacity=".6">
+    <animate attributeName="cy" values="56;45;56" dur="1.8s" repeatCount="indefinite" begin=".8s"/>
+  </circle>
+  <circle cx="7"   cy="72" r="1.7" fill="#34d399" opacity=".5">
+    <animate attributeName="cy" values="72;60;72" dur="2.2s" repeatCount="indefinite" begin=".4s"/>
+  </circle>
+  `
+      : ""
+  }
+
+  <!-- ── INTERRUPTED ── -->
+  ${
+    inter
+      ? `
+  <polygon points="${HX}" fill="none" stroke="#f59e0b" stroke-width="2.5" opacity=".5">
+    <animate attributeName="stroke-opacity" values=".5;.08;.5" dur=".42s" repeatCount="indefinite"/>
+  </polygon>
+  <g filter="url(#gf2${id})">
+    <text x="90" y="29" font-size="19" font-weight="900" fill="#f59e0b" font-family="monospace" opacity=".75">!</text>
+  </g>
+  <text x="90" y="29" font-size="19" font-weight="900" fill="#f59e0b" font-family="monospace">!</text>
+  `
+      : ""
+  }
+
+  <!-- ── BURNOUT ── -->
+  ${
+    burnout
+      ? `
+  <polygon points="${HX}" fill="none" stroke="#ef4444" stroke-width="2.5" opacity=".4">
+    <animate attributeName="stroke-opacity" values=".4;.06;.4" dur="1.1s" repeatCount="indefinite"/>
+  </polygon>
+  <g filter="url(#gf2${id})">
+    <text x="87" y="30" font-size="17" fill="#ef4444" opacity=".65">✕</text>
+    <text x="7"  y="30" font-size="17" fill="#ef4444" opacity=".65">✕</text>
+  </g>
+  <text x="87" y="30" font-size="17" fill="#ef4444" opacity=".55">✕</text>
+  <text x="7"  y="30" font-size="17" fill="#ef4444" opacity=".55">✕</text>
+  `
+      : ""
+  }
+
+  <!-- ── STATUS DOT (bottom-right) ── -->
+  <circle cx="99" cy="110" r="9"   fill="#070d1c" stroke="${sc}" stroke-width="2"/>
+  <circle cx="99" cy="110" r="4.5" fill="${sc}" opacity="${att ? ".18" : "1"}">
+    ${flow ? '<animate attributeName="opacity" values="1;.22;1" dur="1s" repeatCount="indefinite"/>' : ""}
+  </circle>
+</svg>`;
+      }
+
+      // ── 차트 그리기 ──
+      function drawSparkline(canvasId, data, color, label) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || data.length < 2) return;
+        const ctx = canvas.getContext("2d");
+        const W = canvas.offsetWidth || 300;
+        const H = 80;
+        canvas.width = W;
+        canvas.height = H;
+
+        ctx.clearRect(0, 0, W, H);
+
+        const min = Math.min(...data);
+        const max = Math.max(...data);
+        const range = max - min || 1;
+
+        const pts = data.map((v, i) => ({
+          x: (i / (data.length - 1)) * (W - 2) + 1,
+          y: H - 4 - ((v - min) / range) * (H - 16),
+        }));
+
+        // 그라디언트 배경
+        const grad = ctx.createLinearGradient(0, 0, 0, H);
+        grad.addColorStop(0, color + "33");
+        grad.addColorStop(1, color + "00");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, H);
+        pts.forEach((p) => ctx.lineTo(p.x, p.y));
+        ctx.lineTo(pts[pts.length - 1].x, H);
+        ctx.closePath();
+        ctx.fill();
+
+        // 선
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        pts.forEach((p, i) =>
+          i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y),
+        );
+        ctx.stroke();
+
+        // 마지막 점
+        const last = pts[pts.length - 1];
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(last.x, last.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 현재 값 레이블
+        ctx.fillStyle = color;
+        ctx.font = "500 11px IBM Plex Mono, monospace";
+        ctx.textAlign = "right";
+        ctx.fillText(data[data.length - 1].toFixed(1), W - 4, 14);
+
+        // 격자
+        ctx.strokeStyle = "#1e2330";
+        ctx.lineWidth = 0.5;
+        [0.25, 0.5, 0.75].forEach((t) => {
+          const y = H - 4 - t * (H - 16);
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(W, y);
+          ctx.stroke();
+        });
+      }
+
+      // ── 전역 데이터 ──
+      let simData = null;
+      let currentStep = 0;
+      let animTimer = null;
+      let currentView = "simulation";
+      const logs = [];
+
+      // ── 시뮬레이션 실행 ──
+      async function runSimulation() {
+        const params = {
+          num_developers: parseInt(document.getElementById("p-devs").value),
+          num_sprints: parseInt(document.getElementById("p-sprints").value),
+          meeting_load: parseFloat(document.getElementById("p-meeting").value),
+          review_strictness: parseFloat(
+            document.getElementById("p-review").value,
+          ),
+          codebase_stability: parseFloat(
+            document.getElementById("p-stability").value,
+          ),
+          collaboration_tendency: parseFloat(
+            document.getElementById("p-collab").value,
+          ),
+          requirement_clarity: parseFloat(
+            document.getElementById("p-req").value,
+          ),
+          seed: parseInt(document.getElementById("p-seed").value),
+        };
+
+        document.getElementById("statusDot").className = "status-dot running";
+        document.getElementById("statusText").textContent =
+          "시뮬레이션 실행중...";
+
+        try {
+          const res = await fetch("/simulate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(params),
+          });
+          simData = await res.json();
+        } catch (e) {
+          // 서버 없을 때: 내장 데모 데이터 생성
+          simData = generateDemoData(params);
+        }
+
+        document.getElementById("statusDot").className = "status-dot ready";
+        document.getElementById("statusText").textContent = "준비됨";
+
+        initUI();
+        jumpToStep(0);
+
+        document.getElementById("playBtn").disabled = false;
+        document.getElementById("resetBtn").disabled = false;
+        document.getElementById("toggleViewBtn").disabled = false;
+      }
+
+      // ── 데모 데이터 생성 (서버 없을 때) ──
+      function generateDemoData(params) {
+        const nd = params.num_developers;
+        const ns = params.num_sprints;
+        const total = ns * 10;
+        const snapshots = [];
+        const STATES = [
+          "Coding",
+          "FlowCoding",
+          "Reviewing",
+          "Communicating",
+          "Interrupted",
+          "Idle",
+        ];
+
+        // 초기 에너지/동기부여 상태
+        let teamEnergy = Array(nd).fill(100);
+        let teamMotivation = Array(nd).fill(70);
+        let teamKnowledge = Array(nd)
+          .fill(0)
+          .map((_, i) => 20 + i * 5);
+        let prs = Array(nd).fill(0);
+        let totalDeploys = 0;
+        let totalIncidents = 0;
+
+        for (let step = 1; step <= total; step++) {
+          // 주말 회복
+          if (step % 5 === 0) {
+            teamEnergy = teamEnergy.map((e) => Math.min(100, e + 25));
+            teamMotivation = teamMotivation.map((m) => Math.min(100, m + 5));
+          }
+
+          // 일별 소모
+          teamEnergy = teamEnergy.map((e) =>
+            Math.max(10, e - 4 - Math.random() * 3),
+          );
+          teamMotivation = teamMotivation.map((m) => Math.max(20, m - 0.2));
+          teamKnowledge = teamKnowledge.map((k) =>
+            Math.min(100, k + Math.random() * 2),
+          );
+
+          // PR 생성
+          for (let i = 0; i < nd; i++) {
+            if (Math.random() < 0.35) prs[i]++;
+          }
+
+          if (Math.random() < 0.3) totalDeploys++;
+          if (Math.random() < 0.05) totalIncidents++;
+
+          const sprint = Math.ceil(step / 10);
+          // sprint 종료 시 motivation 보너스
+          if (step % 10 === 0) {
+            teamMotivation = teamMotivation.map((m) => Math.min(100, m + 8));
+          }
+
+          const stateWeights = {
+            Coding: 0.4,
+            FlowCoding: 0.15,
+            Reviewing: 0.15,
+            Communicating: 0.1,
+            Interrupted: 0.1,
+            Idle: 0.1,
+          };
+          const stateKeys = Object.keys(stateWeights);
+          const stateVals = Object.values(stateWeights);
+
+          snapshots.push({
+            step,
+            sprint,
+            agents: Array(nd)
+              .fill(0)
+              .map((_, i) => {
+                const r = Math.random();
+                let cumul = 0;
+                let st = "Idle";
+                for (let j = 0; j < stateKeys.length; j++) {
+                  cumul += stateVals[j];
+                  if (r < cumul) {
+                    st = stateKeys[j];
+                    break;
+                  }
+                }
+                return {
+                  id: i + 1,
+                  skill: [0.5, 1.0, 1.0, 1.5, 1.5, 1.5, 2.0, 2.0, 2.5][i % 9],
+                  energy: teamEnergy[i],
+                  motivation: teamMotivation[i],
+                  knowledge: teamKnowledge[i],
+                  state: teamEnergy[i] < 20 ? "Burnout" : st,
+                  attrited: false,
+                  prs: prs[i],
+                  flow_streak:
+                    st === "FlowCoding" ? 3 + Math.floor(Math.random() * 5) : 0,
+                  is_pl: false,
+                };
+              })
+              .concat([
+                {
+                  id: nd + 1,
+                  skill: 3.0,
+                  energy: Math.min(100, 70 + Math.random() * 20),
+                  motivation: 80,
+                  knowledge: 80,
+                  state: step % 10 === 1 ? "Planning" : "TaskAssigning",
+                  attrited: false,
+                  prs: 0,
+                  flow_streak: 0,
+                  is_pl: true,
+                },
+              ]),
+            metrics: {
+              avg_energy: teamEnergy.reduce((a, b) => a + b, 0) / nd,
+              avg_motivation: teamMotivation.reduce((a, b) => a + b, 0) / nd,
+              avg_knowledge: teamKnowledge.reduce((a, b) => a + b, 0) / nd,
+              total_prs: prs.reduce((a, b) => a + b, 0),
+              deployments: totalDeploys,
+              incidents: totalIncidents,
+              active_devs: nd,
+            },
+          });
+        }
+
+        const finalPRs = prs.reduce((a, b) => a + b, 0) / nd;
+        return {
+          params,
+          snapshots,
+          prism: {
+            "PRs per Engineer": +finalPRs.toFixed(2),
+            "Lead Time (steps)": +(3 + Math.random() * 3).toFixed(2),
+            "Deployment Frequency": +(totalDeploys / ns).toFixed(2),
+            "Change Failure Rate (%)": +(
+              (totalIncidents / Math.max(totalDeploys, 1)) *
+              100
+            ).toFixed(1),
+            "Recovery Time (steps)": 0,
+            "% Time on New Capabilities": +(50 + Math.random() * 20).toFixed(1),
+          },
+          total_steps: ns * 10,
+          num_sprints: ns,
+        };
+      }
+
+      // ── UI 초기화 ──
+      function initUI() {
+        const total = simData.total_steps;
+        const ns = simData.num_sprints;
+
+        // 타임라인
+        const tl = document.getElementById("timelineSteps");
+        tl.innerHTML = "";
+        for (let i = 0; i < total; i++) {
+          const pip = document.createElement("div");
+          pip.className =
+            "step-pip" + ((i + 1) % 10 === 0 ? " sprint-end" : "");
+          pip.title = `Step ${i + 1}`;
+          pip.onclick = () => jumpToStep(i);
+          tl.appendChild(pip);
+        }
+
+        // 스프린트 핍
+        const sp = document.getElementById("sprintPips");
+        sp.innerHTML = "";
+        for (let i = 0; i < ns; i++) {
+          const pip = document.createElement("div");
+          pip.className = "sprint-pip";
+          pip.id = `sp-${i}`;
+          sp.appendChild(pip);
+        }
+      }
+
+      // ── 특정 step으로 이동 ──
+      function jumpToStep(idx) {
+        if (!simData) return;
+        currentStep = Math.max(0, Math.min(idx, simData.snapshots.length - 1));
+        renderStep(simData.snapshots[currentStep]);
+        updateTimeline();
+        updateCharts();
+      }
+
+      // ── step 렌더링 ──
+      function renderStep(snap) {
+        // 헤더
+        document.getElementById("stepLabel").textContent =
+          `STEP ${snap.step}/${simData.total_steps}`;
+        document.getElementById("sprintLabel").textContent =
+          `SPRINT ${snap.sprint}/${simData.num_sprints}`;
+
+        const pct = ((snap.step / simData.total_steps) * 100).toFixed(0);
+        document.getElementById("progressFill").style.width = pct + "%";
+        document.getElementById("progressPct").textContent = pct + "%";
+
+        // 스프린트 핍
+        for (let i = 0; i < simData.num_sprints; i++) {
+          const pip = document.getElementById(`sp-${i}`);
+          if (!pip) continue;
+          const sprintDone = snap.sprint > i + 1;
+          const sprintCurrent = snap.sprint === i + 1;
+          pip.className =
+            "sprint-pip" +
+            (sprintDone ? " done" : sprintCurrent ? " current" : "");
+        }
+
+        // 지표 (최종 프레임워크 값)
+        const fw = simData.prism;
+        document.getElementById("m-prs").textContent = fw["PRs per Engineer"];
+        document.getElementById("m-lt").innerHTML =
+          fw["Lead Time (steps)"] + '<span class="metric-unit">step</span>';
+        document.getElementById("m-df").innerHTML =
+          fw["Deployment Frequency"] +
+          '<span class="metric-unit">/sprint</span>';
+        document.getElementById("m-cfr").innerHTML =
+          fw["Change Failure Rate (%)"] + '<span class="metric-unit">%</span>';
+        document.getElementById("m-rt").innerHTML =
+          fw["Recovery Time (steps)"] + '<span class="metric-unit">step</span>';
+        document.getElementById("m-nc").innerHTML =
+          fw["% Time on New Capabilities"] +
+          '<span class="metric-unit">%</span>';
+
+        // 실시간 상태 바
+        document.getElementById("rt-devs").textContent =
+          snap.metrics.active_devs;
+        document.getElementById("rt-energy").textContent =
+          snap.metrics.avg_energy.toFixed(0);
+        document.getElementById("rt-motivation").textContent =
+          snap.metrics.avg_motivation.toFixed(0);
+        document.getElementById("rt-prs").textContent = snap.metrics.total_prs;
+        document.getElementById("rt-deploys").textContent =
+          snap.metrics.deployments;
+        document.getElementById("rt-incidents").textContent =
+          snap.metrics.incidents;
+
+        // Agent 그리드
+        renderAgents(snap.agents);
+
+        // 로그
+        addLog(snap);
+      }
+
+      // ── Agent 렌더링 ──
+      function renderAgents(agents) {
+        const grid = document.getElementById("agentGrid");
+        grid.innerHTML = "";
+
+        agents.forEach((agent) => {
+          const card = document.createElement("div");
+          card.className = `dev-card state-${agent.state}${agent.is_pl ? " is-pl" : ""}`;
+
+          const energyColor =
+            agent.energy > 60
+              ? "#10b981"
+              : agent.energy > 30
+                ? "#f59e0b"
+                : "#ef4444";
+
+          const tooltip = `
+      <div class="dev-tooltip">
+        <div class="tt-row"><span>상태</span><span class="tt-val">${agent.state}</span></div>
+        <div class="tt-row"><span>스킬</span><span class="tt-val">L${agent.skill}</span></div>
+        <div class="tt-row"><span>에너지</span><span class="tt-val">${agent.energy.toFixed(0)}</span></div>
+        <div class="tt-row"><span>동기부여</span><span class="tt-val">${agent.motivation.toFixed(0)}</span></div>
+        <div class="tt-row"><span>지식</span><span class="tt-val">${agent.knowledge.toFixed(0)}</span></div>
+        <div class="tt-row"><span>PRs</span><span class="tt-val">${agent.prs}</span></div>
+      </div>`;
+
+          card.innerHTML = `
+      ${tooltip}
+      <div class="dev-figure-frame">
+        <div class="dev-figure">${devSVG(agent)}</div>
+      </div>
+      <div class="energy-bar">
+        <div class="energy-fill" style="width:${agent.energy}%;background:${energyColor}"></div>
+      </div>
+      <div class="state-badge" style="color:${STATE_COLORS[agent.state] || "#4a5568"}">
+        ${agent.state.toLowerCase()}
+      </div>
+      <div class="dev-id">${agent.is_pl ? "👑 PL" : `#${agent.id} L${agent.skill}`}</div>`;
+
+          grid.appendChild(card);
+        });
+      }
+
+      // ── 차트 업데이트 ──
+      function updateCharts() {
+        const history = simData.snapshots.slice(0, currentStep + 1);
+        drawSparkline(
+          "chartEnergy",
+          history.map((s) => s.metrics.avg_energy),
+          "#3b82f6",
+          "Energy",
+        );
+        drawSparkline(
+          "chartMotivation",
+          history.map((s) => s.metrics.avg_motivation),
+          "#10b981",
+          "Motivation",
+        );
+        drawSparkline(
+          "chartPRs",
+          history.map((s) => s.metrics.total_prs),
+          "#8b5cf6",
+          "PRs",
+        );
+      }
+
+      // ── 타임라인 업데이트 ──
+      function updateTimeline() {
+        const pips = document.querySelectorAll(".step-pip");
+        pips.forEach((pip, i) => {
+          pip.classList.remove("done", "current");
+          if (i < currentStep) pip.classList.add("done");
+          else if (i === currentStep) pip.classList.add("current");
+        });
+        document.getElementById("timelineInfo").textContent =
+          `${currentStep + 1} / ${simData.total_steps} steps`;
+      }
+
+      // ── 이벤트 로그 ──
+      function addLog(snap) {
+        const log = document.getElementById("eventLog");
+        let msg = "",
+          cls = "";
+
+        if (snap.step % 10 === 1) {
+          msg = `Sprint ${snap.sprint} 시작 · Planning`;
+          cls = "success";
+        } else if (snap.step % 10 === 0) {
+          msg = `Sprint ${snap.sprint} 종료 · Retrospective`;
+          cls = "success";
+        } else if (
+          snap.metrics.incidents >
+          (simData.snapshots[currentStep - 1]?.metrics.incidents || 0)
+        ) {
+          msg = "인시던트 발생 ⚡";
+          cls = "danger";
+        } else if (
+          snap.metrics.deployments >
+          (simData.snapshots[currentStep - 1]?.metrics.deployments || 0)
+        ) {
+          msg = "배포 완료 ✓";
+          cls = "";
+        } else {
+          const flowing = snap.agents.filter(
+            (a) => a.state === "FlowCoding",
+          ).length;
+          if (flowing > 0) {
+            msg = `FlowCoding ×${flowing} 🔥`;
+            cls = "success";
+          } else return;
+        }
+
+        if (!msg) return;
+        const line = document.createElement("div");
+        line.className = "log-line";
+        line.innerHTML = `<span class="log-step">S${snap.step}</span><span class="log-msg ${cls}">${msg}</span>`;
+        log.insertBefore(line, log.firstChild);
+        while (log.children.length > 12) log.removeChild(log.lastChild);
+      }
+
+      // ── 화면 전환 ──
+      function toggleView() {
+        const resultView = document.getElementById("prismResultView");
+        if (currentView === "simulation") {
+          renderPrismResult();
+          resultView.classList.add("visible");
+          document.getElementById("toggleViewBtn").textContent =
+            "◀ 시뮬레이션 보기";
+          currentView = "prism";
+        } else {
+          resultView.classList.remove("visible");
+          document.getElementById("toggleViewBtn").textContent =
+            "📊 PRISM 결과 보기";
+          currentView = "simulation";
+        }
+      }
+
+      // ── PRISM 결과 화면 렌더링 ──
+      function renderPrismResult() {
+        if (!simData) return;
+        const fw = simData.prism;
+        const params = simData.params;
+
+        document.getElementById("resultSubtitle").textContent =
+          `${simData.total_steps} Steps · ${simData.num_sprints} Sprints 완료`;
+
+        // ── 벤치마크 데이터 (DORA / DX Core 4) ──
+        const BENCHMARKS = {
+          "PRs per Engineer": {
+            source: "DX Core 4",
+            type: "percentile",
+            higherBetter: true,
+            p90: 4.3,
+            p75: 4.0,
+            p50: 3.5,
+            ref: "All Companies P90=4.3 / P75=4.0 / P50=3.5",
+          },
+          "Lead Time (steps)": {
+            source: "DORA",
+            type: "grade",
+            higherBetter: false,
+            elite: 1,
+            high: 5,
+            medium: 20,
+            ref: "Elite:<1일 / High:<1주 / Medium:<1월 / Low:1월+",
+          },
+          "Deployment Frequency": {
+            source: "DORA · DX Core 4",
+            type: "grade",
+            higherBetter: true,
+            elite: 10,
+            high: 2,
+            medium: 0.5,
+            ref: "Elite:多회/일 / High:1회/일~주 / Medium:1회/주~월",
+          },
+          "Change Failure Rate (%)": {
+            source: "DORA · DX Core 4",
+            type: "both",
+            higherBetter: false,
+            elite: 5,
+            high: 10,
+            medium: 20,
+            p90: 3.0,
+            p75: 3.4,
+            p50: 4.0,
+            ref: "DORA Elite:<5% / DX Core 4 P90=3.0% P75=3.4% P50=4.0%",
+          },
+          "Recovery Time (steps)": {
+            source: "DORA",
+            type: "grade",
+            higherBetter: false,
+            elite: 1,
+            high: 3,
+            medium: 7,
+            ref: "Elite:<1시간 / High:<1일 / Medium:<1일 / Low:1주~1월",
+          },
+          "% Time on New Capabilities": {
+            source: "DX Core 4",
+            type: "percentile",
+            higherBetter: true,
+            p90: 66.1,
+            p75: 61.6,
+            p50: 59.2,
+            ref: "All Companies P90=66.1% / P75=61.6% / P50=59.2%",
+          },
+        };
+
+        function getBenchmark(key, value) {
+          const b = BENCHMARKS[key];
+          if (!b) return { label: "", cls: "", source: "", ref: "" };
+          let label = "",
+            cls = "";
+
+          if (b.type === "percentile") {
+            if (b.higherBetter) {
+              if (value >= b.p90) {
+                label = "P90+";
+                cls = "bench-p90";
+              } else if (value >= b.p75) {
+                label = "P75+";
+                cls = "bench-p75";
+              } else if (value >= b.p50) {
+                label = "P50+";
+                cls = "bench-p50";
+              } else {
+                label = "P50−";
+                cls = "bench-below";
+              }
+            } else {
+              if (value <= b.p90) {
+                label = "P90+";
+                cls = "bench-p90";
+              } else if (value <= b.p75) {
+                label = "P75+";
+                cls = "bench-p75";
+              } else if (value <= b.p50) {
+                label = "P50+";
+                cls = "bench-p50";
+              } else {
+                label = "P50−";
+                cls = "bench-below";
+              }
+            }
+          } else {
+            if (!b.higherBetter) {
+              if (value <= b.elite) {
+                label = "Elite";
+                cls = "bench-elite";
+              } else if (value <= b.high) {
+                label = "High";
+                cls = "bench-high";
+              } else if (value <= b.medium) {
+                label = "Medium";
+                cls = "bench-medium";
+              } else {
+                label = "Low";
+                cls = "bench-low";
+              }
+            } else {
+              if (value >= b.elite) {
+                label = "Elite";
+                cls = "bench-elite";
+              } else if (value >= b.high) {
+                label = "High";
+                cls = "bench-high";
+              } else if (value >= b.medium) {
+                label = "Medium";
+                cls = "bench-medium";
+              } else {
+                label = "Low";
+                cls = "bench-low";
+              }
+            }
+          }
+          return { label, cls, source: b.source, ref: b.ref };
+        }
+
+        function getBaseline() {
+          return {
+            "PRs per Engineer":
+              parseFloat(document.getElementById("b-prs").value) || null,
+            "Lead Time (steps)":
+              parseFloat(document.getElementById("b-lt").value) || null,
+            "Deployment Frequency":
+              parseFloat(document.getElementById("b-df").value) || null,
+            "Change Failure Rate (%)":
+              parseFloat(document.getElementById("b-cfr").value) || null,
+            "Recovery Time (steps)":
+              parseFloat(document.getElementById("b-rt").value) || null,
+            "% Time on New Capabilities":
+              parseFloat(document.getElementById("b-nc").value) || null,
+          };
+        }
+
+        function getDelta(key, simValue, baseline) {
+          const bVal = baseline[key];
+          if (bVal === null) return null;
+          const b = BENCHMARKS[key];
+          const diff = simValue - bVal;
+          const pct = bVal !== 0 ? ((diff / bVal) * 100).toFixed(1) : "—";
+          const improved = b
+            ? b.higherBetter
+              ? diff > 0
+              : diff < 0
+            : diff > 0;
+          const sign = diff > 0 ? "+" : "";
+          return {
+            diff: `${sign}${diff.toFixed(2)}`,
+            pct: pct === "—" ? "—" : `${sign}${pct}%`,
+            improved,
+            cls: improved
+              ? "delta-positive"
+              : diff === 0
+                ? "delta-neutral"
+                : "delta-negative",
+            arrow: improved ? "▲" : diff === 0 ? "–" : "▼",
+          };
+        }
+
+        const cardAccents = {
+          "PRs per Engineer": "#3b82f6",
+          "Lead Time (steps)": "#8b5cf6",
+          "Deployment Frequency": "#06b6d4",
+          "Change Failure Rate (%)": "#ef4444",
+          "Recovery Time (steps)": "#f59e0b",
+          "% Time on New Capabilities": "#10b981",
+        };
+
+        const units = {
+          "PRs per Engineer": "",
+          "Lead Time (steps)": "step",
+          "Deployment Frequency": "/sprint",
+          "Change Failure Rate (%)": "%",
+          "Recovery Time (steps)": "step",
+          "% Time on New Capabilities": "%",
+        };
+
+        const baseline = getBaseline();
+        const cardsEl = document.getElementById("prismCards");
+        cardsEl.innerHTML = "";
+        Object.entries(fw).forEach(([key, value]) => {
+          const bench = getBenchmark(key, value);
+          const delta = getDelta(key, value, baseline);
+          const accent = cardAccents[key] || "#3b82f6";
+          const unit = units[key] || "";
+
+          const deltaHTML = delta
+            ? `<div class="${delta.cls}" style="margin-top:6px">
+           ${delta.arrow} ${delta.diff}${unit} (${delta.pct}) vs Baseline
+         </div>`
+            : "";
+
+          const benchHTML = bench.label
+            ? `<div class="prism-card-bench" style="margin-top:8px">
+           <span class="bench-source">${bench.source}</span><span class="bench-badge ${bench.cls}">${bench.label}</span>
+           <div style="font-size:9px;color:var(--text3);margin-top:4px">${bench.ref}</div>
+         </div>`
+            : "";
+
+          cardsEl.innerHTML += `
+      <div class="prism-card" style="--card-accent:${accent}">
+        <div class="prism-card-label">${key.replace(" (%)", "").replace(" (steps)", "")}</div>
+        <div class="prism-card-value">${value}<span class="prism-card-unit">${unit}</span></div>
+        ${deltaHTML}
+        ${benchHTML}
+      </div>`;
+        });
+
+        const paramLabels = {
+          num_developers: "개발자 수",
+          num_sprints: "스프린트 수",
+          meeting_load: "회의 부하(분)",
+          review_strictness: "리뷰 엄격도",
+          codebase_stability: "코드 안정성",
+          collaboration_tendency: "협업 성향",
+          requirement_clarity: "요구사항 명확도",
+          seed: "랜덤 시드",
+        };
+
+        const paramsEl = document.getElementById("prismParamsGrid");
+        paramsEl.innerHTML = "";
+        Object.entries(params).forEach(([key, value]) => {
+          paramsEl.innerHTML += `
+      <div class="param-chip">
+        <span class="param-chip-label">${paramLabels[key] || key}</span>
+        <span class="param-chip-value">${value}</span>
+      </div>`;
+        });
+      }
+
+      // ── 애니메이션 ──
+      let playing = false;
+      function playAnimation() {
+        if (!simData) return;
+        if (playing) {
+          clearInterval(animTimer);
+          playing = false;
+          document.getElementById("playBtn").textContent = "⏵ 애니메이션 재생";
+          return;
+        }
+        playing = true;
+        document.getElementById("playBtn").textContent = "⏸ 일시정지";
+        if (currentStep >= simData.snapshots.length - 1) currentStep = 0;
+        animTimer = setInterval(() => {
+          if (currentStep >= simData.snapshots.length - 1) {
+            clearInterval(animTimer);
+            playing = false;
+            document.getElementById("playBtn").textContent =
+              "⏵ 애니메이션 재생";
+            return;
+          }
+          currentStep++;
+          renderStep(simData.snapshots[currentStep]);
+          updateTimeline();
+          updateCharts();
+        }, 200);
+      }
+
+      // ── 테마 토글 ──
+      function toggleTheme() {
+        const isLight = document.documentElement.classList.toggle("light");
+        document.getElementById("themeIcon").textContent = isLight ? "☽" : "☀";
+        localStorage.setItem("theme", isLight ? "light" : "dark");
+      }
+
+      // 초기 실행
+      window.addEventListener("load", () => {
+        if (localStorage.getItem("theme") === "light") {
+          document.documentElement.classList.add("light");
+          document.getElementById("themeIcon").textContent = "☽";
+        }
+        runSimulation();
+      });
+    </script>
+  </body>
+</html>
