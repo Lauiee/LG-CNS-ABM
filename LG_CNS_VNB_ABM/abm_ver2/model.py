@@ -73,6 +73,11 @@ class LGCNSDevModel(Model):
         self.sprint_backlog_size = sprint_backlog_size
         self.review_defect_reduction = 0.6
         self.review_cost_slope = 0.8
+        self.target_wip_per_dev = 5.0
+        self.overload_energy_cost = 0.35
+        self.overload_motivation_cost = 0.10
+        self.team_awareness_buffer = 0.4
+        self.max_backlog_pressure = 2.0
 
         # 상태
         self.current_step = 0
@@ -209,6 +214,39 @@ class LGCNSDevModel(Model):
 
         self.metrics["total_dev_steps"] += len(active_devs)
 
+    def _apply_backlog_pressure(self):
+        active_devs = [d for d in self.developers if not d.attrited]
+        if not active_devs:
+            return
+
+        active_dev_count = len(active_devs)
+        raw_pressure = max(
+            0.0,
+            (len(self.backlog) / active_dev_count - self.target_wip_per_dev)
+            / self.target_wip_per_dev,
+        )
+        if not raw_pressure:
+            return
+
+        avg_awareness = (
+            sum(pl.team_awareness for pl in self.pls) / len(self.pls)
+            if self.pls else 0.0
+        )
+        effective_pressure = raw_pressure * (1 - avg_awareness * self.team_awareness_buffer)
+        effective_pressure = min(max(0.0, effective_pressure), self.max_backlog_pressure)
+        if not effective_pressure:
+            return
+
+        for dev in active_devs:
+            dev.energy = max(
+                0.0,
+                min(100.0, dev.energy - effective_pressure * self.overload_energy_cost),
+            )
+            dev.motivation = max(
+                0.0,
+                min(100.0, dev.motivation - effective_pressure * self.overload_motivation_cost),
+            )
+
     def step(self):
         if self.current_step >= self.total_steps:
             self.running = False
@@ -225,6 +263,9 @@ class LGCNSDevModel(Model):
 
         # knowledge decay 적용 (모델 레벨)
         self.team_tech_debt = min(1.0, self.team_tech_debt + 0.001)
+
+        # backlog pressure 적용
+        self._apply_backlog_pressure()
 
         # Agent 스텝
         self.schedule.step()
