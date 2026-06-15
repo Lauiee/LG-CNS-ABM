@@ -15,7 +15,7 @@ def run_simulation(params: dict) -> dict:
         review_strictness=params.get("review_strictness", 0.7),
         codebase_stability=params.get("codebase_stability", 0.8),
         collaboration_tendency=params.get("collaboration_tendency", 0.6),
-        requirement_clarity=params.get("requirement_clarity", 0.7),
+        requirement_clarity=params.get("requirement_clarity", 0.6),
         knowledge_decay_rate=params.get("knowledge_decay_rate", 0.02),
         sprint_backlog_size=params.get("sprint_backlog_size", 30),
         seed=params.get("seed", 42),

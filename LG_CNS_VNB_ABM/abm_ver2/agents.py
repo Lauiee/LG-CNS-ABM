@@ -292,6 +292,8 @@ class DeveloperAgent(Agent):
                 1 - self.model.review_defect_reduction * self.model.review_strictness
             ),
         )
+        clarity_factor = 1 - self.model.clarity_defect_reduction * self.model.requirement_clarity
+        defect_chance = max(0.0, defect_chance * clarity_factor)
         if random.random() < defect_chance:
             incident = create_incident_task(self.model.current_step, caused_by=task.task_id)
             self.model.backlog.append(incident)

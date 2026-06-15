@@ -30,6 +30,8 @@ INTERNAL_METRIC_COLUMNS = [
 ]
 
 PARAM_COLUMNS = [
+    "meeting_load",
+    "requirement_clarity",
     "review_strictness",
     "codebase_stability",
     "sprint_backlog_size",
@@ -43,6 +45,21 @@ RESULT_COLUMNS = [
     "seed",
     "num_sprints",
 ] + PARAM_COLUMNS + METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS
+
+
+def scenario_a_conditions():
+    conditions = []
+    condition_index = 1
+    for requirement_clarity in [0.4, 0.8]:
+        for meeting_load in [30, 60, 120, 180]:
+            conditions.append({
+                "scenario_id": "A",
+                "condition_id": f"A{condition_index}",
+                "meeting_load": meeting_load,
+                "requirement_clarity": requirement_clarity,
+            })
+            condition_index += 1
+    return conditions
 
 
 def scenario_b_conditions():
@@ -82,6 +99,8 @@ def scenario_c_conditions():
 
 
 def get_conditions(scenario_id):
+    if scenario_id == "A":
+        return scenario_a_conditions()
     if scenario_id == "B":
         return scenario_b_conditions()
     if scenario_id == "C":
@@ -161,7 +180,7 @@ def write_csv(path, rows, fieldnames):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run scenario-based ABM experiments.")
-    parser.add_argument("--scenario", default="B", choices=["B", "C"])
+    parser.add_argument("--scenario", default="B", choices=["A", "B", "C"])
     parser.add_argument("--runs", type=int, default=30)
     parser.add_argument("--sprints", type=int, default=6)
     parser.add_argument("--seed-start", type=int, default=1000)

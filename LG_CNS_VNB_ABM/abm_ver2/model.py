@@ -40,7 +40,7 @@ class LGCNSDevModel(Model):
         codebase_stability: float = 0.8,
         tech_debt_ratio: float = 0.1,
         pipeline_efficiency: float = 0.7,
-        requirement_clarity: float = 0.7,
+        requirement_clarity: float = 0.6,
         communication_overhead: float = 0.3,
         knowledge_decay_rate: float = 0.02,
         collaboration_tendency: float = 0.6,
@@ -78,6 +78,11 @@ class LGCNSDevModel(Model):
         self.overload_motivation_cost = 0.10
         self.team_awareness_buffer = 0.4
         self.max_backlog_pressure = 2.0
+        self.baseline_meeting_load = 60.0
+        self.meeting_energy_cost = 0.4
+        self.meeting_motivation_cost = 0.1
+        self.meeting_flow_disruption_prob = 0.08
+        self.clarity_defect_reduction = 0.6
 
         # 상태
         self.current_step = 0
@@ -168,6 +173,8 @@ class LGCNSDevModel(Model):
             0.0,
             base_prob * (1 - self.review_defect_reduction * self.review_strictness),
         )
+        clarity_factor = 1 - self.clarity_defect_reduction * self.requirement_clarity
+        effective_prob = max(0.0, effective_prob * clarity_factor)
         if random.random() < effective_prob:
             priority_weights = {"Low": 0.4, "Medium": 0.3, "High": 0.2, "Critical": 0.1}
             priority = random.choices(
@@ -247,6 +254,40 @@ class LGCNSDevModel(Model):
                 min(100.0, dev.motivation - effective_pressure * self.overload_motivation_cost),
             )
 
+    def _apply_meeting_pressure(self):
+        active_devs = [d for d in self.developers if not d.attrited]
+        if not active_devs:
+            return
+
+        meeting_pressure = max(
+            0.0,
+            (self.meeting_load - self.baseline_meeting_load) / self.baseline_meeting_load,
+        )
+        if not meeting_pressure:
+            return
+
+        flow_disruption_prob = min(
+            1.0,
+            meeting_pressure * self.meeting_flow_disruption_prob,
+        )
+        for dev in active_devs:
+            interrupt_sensitivity_multiplier = 0.5 + dev.interrupt_sensitivity
+            dev.energy = max(
+                0.0,
+                min(
+                    100.0,
+                    dev.energy
+                    - meeting_pressure * self.meeting_energy_cost
+                    * interrupt_sensitivity_multiplier,
+                ),
+            )
+            dev.motivation = max(
+                0.0,
+                min(100.0, dev.motivation - meeting_pressure * self.meeting_motivation_cost),
+            )
+            if random.random() < flow_disruption_prob:
+                dev.flow_streak = 0
+
     def step(self):
         if self.current_step >= self.total_steps:
             self.running = False
@@ -266,6 +307,9 @@ class LGCNSDevModel(Model):
 
         # backlog pressure 적용
         self._apply_backlog_pressure()
+
+        # meeting/interruption pressure 적용
+        self._apply_meeting_pressure()
 
         # Agent 스텝
         self.schedule.step()
