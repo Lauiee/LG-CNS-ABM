@@ -86,9 +86,16 @@ DEFAULT_DISTRIBUTIONS = {
 
 
 class ParameterSampler:
-    def __init__(self, distributions=None, seed=None):
+    def __init__(self, distributions=None, seed=None, distribution_overrides=None):
         self.rng = random.Random(seed)
-        self.distributions = distributions if distributions is not None else DEFAULT_DISTRIBUTIONS
+        base = distributions if distributions is not None else DEFAULT_DISTRIBUTIONS
+        self.distributions = {
+            name: spec.copy() if isinstance(spec, dict) else spec
+            for name, spec in base.items()
+        }
+        if distribution_overrides:
+            for name, spec in distribution_overrides.items():
+                self.distributions[name] = spec.copy() if isinstance(spec, dict) else spec
 
     def sample(self, name, default=None, context=None):
         spec = self.distributions.get(name)

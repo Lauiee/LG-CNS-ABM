@@ -17,7 +17,9 @@ def run_simulation(params: dict) -> dict:
         collaboration_tendency=params.get("collaboration_tendency", 0.6),
         requirement_clarity=params.get("requirement_clarity", 0.7),
         knowledge_decay_rate=params.get("knowledge_decay_rate", 0.02),
+        sprint_backlog_size=params.get("sprint_backlog_size", 30),
         seed=params.get("seed", 42),
+        distribution_overrides=params.get("distribution_overrides"),
     )
 
     snapshots = []
@@ -62,10 +64,25 @@ def run_simulation(params: dict) -> dict:
         }
         snapshots.append(snapshot)
 
+    active = [d for d in m.developers if not d.attrited]
+    internal_metrics = {
+        "avg_energy": round(sum(d.energy for d in active) / max(len(active), 1), 2),
+        "avg_motivation": round(sum(d.motivation for d in active) / max(len(active), 1), 2),
+        "min_energy": round(min((d.energy for d in active), default=0), 2),
+        "avg_knowledge": round(sum(d.knowledge for d in active) / max(len(active), 1), 2),
+        "attrition_count": m.metrics["attrition_count"],
+        "coaching_count": sum(pl.coaching_count for pl in m.pls),
+        "remaining_backlog": len(m.backlog),
+        "completed_tasks": len(m.completed_tasks),
+        "active_developers": len(active),
+        "low_energy_count": sum(1 for d in active if d.energy < d.burnout_threshold),
+    }
+
     return {
         "params": params,
         "snapshots": snapshots,
         "prism": m.get_framework_metrics(),
+        "internal_metrics": internal_metrics,
         "total_steps": m.total_steps,
         "num_sprints": m.num_sprints,
     }

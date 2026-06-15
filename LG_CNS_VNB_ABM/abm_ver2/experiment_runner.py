@@ -16,15 +16,33 @@ METRIC_COLUMNS = [
     "% Time on New Capabilities",
 ]
 
+INTERNAL_METRIC_COLUMNS = [
+    "avg_energy",
+    "avg_motivation",
+    "min_energy",
+    "avg_knowledge",
+    "attrition_count",
+    "coaching_count",
+    "remaining_backlog",
+    "completed_tasks",
+    "active_developers",
+    "low_energy_count",
+]
+
+PARAM_COLUMNS = [
+    "review_strictness",
+    "codebase_stability",
+    "sprint_backlog_size",
+    "team_awareness",
+]
+
 RESULT_COLUMNS = [
     "scenario_id",
     "condition_id",
     "run_id",
     "seed",
     "num_sprints",
-    "review_strictness",
-    "codebase_stability",
-] + METRIC_COLUMNS
+] + PARAM_COLUMNS + METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS
 
 
 def scenario_b_conditions():
@@ -42,6 +60,35 @@ def scenario_b_conditions():
     return conditions
 
 
+def scenario_c_conditions():
+    conditions = []
+    condition_index = 1
+    for team_awareness in [0.4, 0.8]:
+        for sprint_backlog_size in [10, 20, 30, 40, 50]:
+            conditions.append({
+                "scenario_id": "C",
+                "condition_id": f"C{condition_index}",
+                "sprint_backlog_size": sprint_backlog_size,
+                "team_awareness": team_awareness,
+                "distribution_overrides": {
+                    "pl.team_awareness": {
+                        "type": "constant",
+                        "value": team_awareness,
+                    },
+                },
+            })
+            condition_index += 1
+    return conditions
+
+
+def get_conditions(scenario_id):
+    if scenario_id == "B":
+        return scenario_b_conditions()
+    if scenario_id == "C":
+        return scenario_c_conditions()
+    raise ValueError(f"Unsupported scenario: {scenario_id}")
+
+
 def run_condition(condition, runs, num_sprints, seed_start, num_developers):
     rows = []
     for run_index in range(runs):
@@ -49,12 +96,17 @@ def run_condition(condition, runs, num_sprints, seed_start, num_developers):
         params = {
             "num_developers": num_developers,
             "num_sprints": num_sprints,
-            "review_strictness": condition["review_strictness"],
-            "codebase_stability": condition["codebase_stability"],
             "seed": seed,
         }
+        for column in PARAM_COLUMNS:
+            if column != "team_awareness" and column in condition:
+                params[column] = condition[column]
+        if "distribution_overrides" in condition:
+            params["distribution_overrides"] = condition["distribution_overrides"]
+
         result = run_simulation(params)
         prism = result.get("prism", {})
+        internal_metrics = result.get("internal_metrics", {})
 
         row = {
             "scenario_id": condition["scenario_id"],
@@ -62,11 +114,13 @@ def run_condition(condition, runs, num_sprints, seed_start, num_developers):
             "run_id": run_index + 1,
             "seed": seed,
             "num_sprints": num_sprints,
-            "review_strictness": condition["review_strictness"],
-            "codebase_stability": condition["codebase_stability"],
         }
+        for column in PARAM_COLUMNS:
+            row[column] = condition.get(column, "")
         for metric in METRIC_COLUMNS:
             row[metric] = prism.get(metric, "")
+        for metric in INTERNAL_METRIC_COLUMNS:
+            row[metric] = internal_metrics.get(metric, "")
         rows.append(row)
     return rows
 
@@ -85,11 +139,11 @@ def summarize_results(rows):
             "condition_id": condition_id,
             "runs": len(condition_rows),
             "num_sprints": first["num_sprints"],
-            "review_strictness": first["review_strictness"],
-            "codebase_stability": first["codebase_stability"],
         }
+        for column in PARAM_COLUMNS:
+            summary[column] = first.get(column, "")
 
-        for metric in METRIC_COLUMNS:
+        for metric in METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS:
             values = [float(row[metric]) for row in condition_rows if row[metric] != ""]
             summary[f"{metric} mean"] = statistics.mean(values) if values else ""
             summary[f"{metric} std"] = statistics.stdev(values) if len(values) > 1 else 0.0
@@ -107,7 +161,7 @@ def write_csv(path, rows, fieldnames):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run scenario-based ABM experiments.")
-    parser.add_argument("--scenario", default="B", choices=["B"])
+    parser.add_argument("--scenario", default="B", choices=["B", "C"])
     parser.add_argument("--runs", type=int, default=30)
     parser.add_argument("--sprints", type=int, default=6)
     parser.add_argument("--seed-start", type=int, default=1000)
@@ -119,7 +173,7 @@ def parse_args():
 def main():
     args = parse_args()
     rows = []
-    for condition in scenario_b_conditions():
+    for condition in get_conditions(args.scenario):
         rows.extend(
             run_condition(
                 condition=condition,
@@ -136,10 +190,8 @@ def main():
         "condition_id",
         "runs",
         "num_sprints",
-        "review_strictness",
-        "codebase_stability",
-    ]
-    for metric in METRIC_COLUMNS:
+    ] + PARAM_COLUMNS
+    for metric in METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS:
         summary_columns.extend([f"{metric} mean", f"{metric} std"])
 
     write_csv(args.output_dir / "experiment_results.csv", rows, RESULT_COLUMNS)

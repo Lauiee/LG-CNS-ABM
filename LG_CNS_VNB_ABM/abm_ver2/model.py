@@ -47,10 +47,14 @@ class LGCNSDevModel(Model):
         sprint_backlog_size: int = 30,
         seed: int = 42,
         sampler=None,
+        distribution_overrides=None,
     ):
         super().__init__(seed=seed)
         random.seed(seed)
-        self.sampler = sampler or ParameterSampler(seed=seed)
+        self.sampler = sampler or ParameterSampler(
+            seed=seed,
+            distribution_overrides=distribution_overrides,
+        )
 
         # 파라미터
         self.num_developers = num_developers
