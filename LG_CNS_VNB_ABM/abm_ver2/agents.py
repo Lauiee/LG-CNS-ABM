@@ -262,9 +262,14 @@ class DeveloperAgent(Agent):
         if self.current_task is None:
             self.state = "Idle"
             return
-        self.energy = max(0, self.energy - 5)
-        self.current_task.progress += 0.5
-        if self.current_task.is_complete():
+        review_cost_multiplier = max(
+            0.1,
+            1 + self.model.review_cost_slope * self.model.review_strictness,
+        )
+        self.energy = max(0, self.energy - 5 * review_cost_multiplier)
+        self.current_task.review_progress = getattr(self.current_task, "review_progress", 0.0)
+        self.current_task.review_progress += 0.5 / review_cost_multiplier
+        if self.current_task.review_progress >= 1.0:
             self._complete_review()
 
     def _complete_review(self):
@@ -272,11 +277,17 @@ class DeveloperAgent(Agent):
         self.current_task = None
         self.state = "Idle"
         self.knowledge = min(100, self.knowledge + 3)
-        # defect 발견
-        defect_chance = task.defect_prob * self.model.review_strictness
+        # Review strictness lowers escaped defect risk, but makes review slower/costlier.
+        defect_chance = max(
+            0.0,
+            task.defect_prob * (
+                1 - self.model.review_defect_reduction * self.model.review_strictness
+            ),
+        )
         if random.random() < defect_chance:
             incident = create_incident_task(self.model.current_step, caused_by=task.task_id)
             self.model.backlog.append(incident)
+            self.model.metrics["failed_deployments"] += 1
         else:
             # 배포 태스크 생성
             from tasks import Task as T
@@ -284,7 +295,7 @@ class DeveloperAgent(Agent):
                 task_type="deploying",
                 complexity=task.complexity,
                 status="backlog",
-                created_step=self.model.current_step,
+                created_step=task.created_step,
                 is_new_capability=task.is_new_capability,
             )
             self.model.backlog.append(deploy)
@@ -462,6 +473,7 @@ class PLAgent(Agent):
         reviewer = max(candidates, key=lambda d: d.skill_level)
         reviewer.current_task = task
         reviewer.state = "Reviewing"
+        task.review_progress = 0.0
         task.status = "in_progress"
 
     def _update_team_stress(self):

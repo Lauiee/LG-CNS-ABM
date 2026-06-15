@@ -67,6 +67,8 @@ class LGCNSDevModel(Model):
         self.knowledge_decay_rate = knowledge_decay_rate
         self.collaboration_tendency = collaboration_tendency
         self.sprint_backlog_size = sprint_backlog_size
+        self.review_defect_reduction = 0.6
+        self.review_cost_slope = 0.8
 
         # 상태
         self.current_step = 0
@@ -153,7 +155,11 @@ class LGCNSDevModel(Model):
 
     def _check_incident_spawn(self):
         base_prob = (1 - self.codebase_stability) * 0.15
-        if random.random() < base_prob:
+        effective_prob = max(
+            0.0,
+            base_prob * (1 - self.review_defect_reduction * self.review_strictness),
+        )
+        if random.random() < effective_prob:
             priority_weights = {"Low": 0.4, "Medium": 0.3, "High": 0.2, "Critical": 0.1}
             priority = random.choices(
                 list(priority_weights.keys()),
