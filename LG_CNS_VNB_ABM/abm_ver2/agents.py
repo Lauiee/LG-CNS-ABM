@@ -277,6 +277,14 @@ class DeveloperAgent(Agent):
         self.current_task = None
         self.state = "Idle"
         self.knowledge = min(100, self.knowledge + 3)
+        if task.task_type == "incident" and not getattr(task, "recovery_recorded", False):
+            task.completed_step = self.model.current_step
+            task.status = "done"
+            task.recovery_recorded = True
+            recovery_time = max(1, task.completed_step - task.created_step)
+            self.model.metrics["recovery_times"].append(recovery_time)
+            self.model.completed_tasks.append(task)
+
         # Review strictness lowers escaped defect risk, but makes review slower/costlier.
         defect_chance = max(
             0.0,
