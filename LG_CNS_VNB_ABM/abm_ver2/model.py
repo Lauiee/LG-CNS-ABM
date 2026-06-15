@@ -2,6 +2,7 @@ import random
 from mesa import Model, Agent
 from tasks import Task, create_random_task, create_incident_task, COMPLEXITY_DIST
 from agents import DeveloperAgent, PLAgent
+from sampling import ParameterSampler
 
 
 class SimpleScheduler:
@@ -45,9 +46,11 @@ class LGCNSDevModel(Model):
         collaboration_tendency: float = 0.6,
         sprint_backlog_size: int = 30,
         seed: int = 42,
+        sampler=None,
     ):
         super().__init__(seed=seed)
         random.seed(seed)
+        self.sampler = sampler or ParameterSampler(seed=seed)
 
         # 파라미터
         self.num_developers = num_developers
@@ -108,7 +111,7 @@ class LGCNSDevModel(Model):
 
         for i in range(num_developers):
             skill = skill_pool[i] if i < len(skill_pool) else 1.5
-            dev = DeveloperAgent(self, skill_level=skill)
+            dev = DeveloperAgent(self, skill_level=skill, sampler=self.sampler)
             self.developers.append(dev)
             self.schedule.add(dev)
 
@@ -116,7 +119,7 @@ class LGCNSDevModel(Model):
         self.pls: list[PLAgent] = []
         devs_per_pl = self.developers[:]
         for _ in range(num_pl):
-            pl = PLAgent(self, team_members=devs_per_pl)
+            pl = PLAgent(self, team_members=devs_per_pl, sampler=self.sampler)
             self.pls.append(pl)
             self.schedule.add(pl)
 

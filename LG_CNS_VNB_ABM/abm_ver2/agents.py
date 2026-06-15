@@ -18,6 +18,20 @@ STATE_COLORS = {
     "Idle":          "#888780",
 }
 
+
+def _init_mesa_agent(agent, model):
+    try:
+        Agent.__init__(agent, model)
+    except TypeError as exc:
+        if "missing 1 required positional argument: 'model'" not in str(exc):
+            raise
+        next_id = getattr(model, "next_id", None)
+        unique_id = next_id() if callable(next_id) else getattr(model, "_next_agent_id", 0) + 1
+        if not callable(next_id):
+            model._next_agent_id = unique_id
+        Agent.__init__(agent, unique_id, model)
+
+
 def _skill_coeff(skill_level: float) -> float:
     levels = sorted(SKILL_PRODUCTIVITY.keys())
     for i, lv in enumerate(levels):
@@ -33,29 +47,87 @@ def _skill_coeff(skill_level: float) -> float:
 
 
 class DeveloperAgent(Agent):
-    def __init__(self, model, skill_level: float = 1.5):
-        super().__init__(model)
-        # 정적 속성
-        self.skill_level = skill_level
+    def __init__(self, model, skill_level: float = 1.5, sampler=None):
+        _init_mesa_agent(self, model)
+        if sampler is None:
+            # 정적 속성
+            self.skill_level = skill_level
 
-        # TODO: 추후 아래 주석 기준으로 프레임워크 실측값으로 교체 예정
-        # - quality_tendency    ← CFR (개인 단위)
-        # - interrupt_sensitivity ← DXI Driver 07 "Deep Work" 점수
-        # - burnout_threshold   ← DXI 종합 점수
-        # - learning_rate       ← skill_level 연동 유지 (프레임워크 직접 연결 없음)
-        noise = lambda: random.uniform(0.9, 1.1)
+            # TODO: 추후 아래 주석 기준으로 프레임워크 실측값으로 교체 예정
+            # - quality_tendency    ← CFR (개인 단위)
+            # - interrupt_sensitivity ← DXI Driver 07 "Deep Work" 점수
+            # - burnout_threshold   ← DXI 종합 점수
+            # - learning_rate       ← skill_level 연동 유지 (프레임워크 직접 연결 없음)
+            noise = lambda: random.uniform(0.9, 1.1)
 
-        self.learning_rate = max(0.1, (0.9 - skill_level * 0.15) * noise())
-        self.burnout_threshold = max(10, (30 - skill_level * 3) * noise())
-        self.quality_tendency = min(0.95, (0.3 + skill_level * 0.15) * noise())
-        self.interrupt_sensitivity = random.uniform(0.3, 0.7)
+            self.learning_rate = max(0.1, (0.9 - skill_level * 0.15) * noise())
+            self.burnout_threshold = max(10, (30 - skill_level * 3) * noise())
+            self.quality_tendency = min(0.95, (0.3 + skill_level * 0.15) * noise())
+            self.interrupt_sensitivity = random.uniform(0.3, 0.7)
 
-        # 동적 상태
-        self.energy = 100.0
-        self.motivation = 70.0
-        self.knowledge = min(100.0, skill_level * 20)
-        self.flow_streak = 0
-        self.accumulated_tech_debt = 0.0
+            # 동적 상태
+            self.energy = 100.0
+            self.motivation = 70.0
+            self.knowledge = min(100.0, skill_level * 20)
+            self.flow_streak = 0
+            self.accumulated_tech_debt = 0.0
+        else:
+            context = {"base_skill_level": skill_level, "skill_level": skill_level}
+            self.skill_level = sampler.sample(
+                "developer.skill_level",
+                default=skill_level,
+                context=context,
+            )
+            context["skill_level"] = self.skill_level
+
+            # 정적 속성
+            self.learning_rate = sampler.sample(
+                "developer.learning_rate",
+                default=max(0.1, 0.9 - self.skill_level * 0.15),
+                context=context,
+            )
+            self.burnout_threshold = sampler.sample(
+                "developer.burnout_threshold",
+                default=max(10, 30 - self.skill_level * 3),
+                context=context,
+            )
+            self.quality_tendency = sampler.sample(
+                "developer.quality_tendency",
+                default=min(0.95, 0.3 + self.skill_level * 0.15),
+                context=context,
+            )
+            self.interrupt_sensitivity = sampler.sample(
+                "developer.interrupt_sensitivity",
+                default=0.5,
+                context=context,
+            )
+
+            # 동적 상태
+            self.energy = sampler.sample(
+                "developer.energy",
+                default=100.0,
+                context=context,
+            )
+            self.motivation = sampler.sample(
+                "developer.motivation",
+                default=70.0,
+                context=context,
+            )
+            self.knowledge = sampler.sample(
+                "developer.knowledge",
+                default=min(100.0, self.skill_level * 20),
+                context=context,
+            )
+            self.flow_streak = int(sampler.sample(
+                "developer.flow_streak",
+                default=0,
+                context=context,
+            ))
+            self.accumulated_tech_debt = sampler.sample(
+                "developer.accumulated_tech_debt",
+                default=0.0,
+                context=context,
+            )
 
         # 행동 상태
         self.state = "Idle"
@@ -268,11 +340,15 @@ class DeveloperAgent(Agent):
 
 
 class PLAgent(Agent):
-    def __init__(self, model, team_members: list):
-        super().__init__(model)
+    def __init__(self, model, team_members: list, sampler=None):
+        _init_mesa_agent(self, model)
         self.team_members = team_members
-        self.leadership_style = random.uniform(0.5, 1.0)
-        self.team_awareness = random.uniform(0.6, 0.9)
+        if sampler is None:
+            self.leadership_style = random.uniform(0.5, 1.0)
+            self.team_awareness = random.uniform(0.6, 0.9)
+        else:
+            self.leadership_style = sampler.sample("pl.leadership_style", default=0.75)
+            self.team_awareness = sampler.sample("pl.team_awareness", default=0.75)
         self.energy = 100.0
         self.motivation = 80.0
         self.state = "Idle"
@@ -429,7 +505,11 @@ class PLAgent(Agent):
             if dev.attrited:
                 self.team_members.remove(dev)
                 self.model.metrics["attrition_count"] += 1
-                new_dev = DeveloperAgent(self.model, skill_level=1.0)
+                new_dev = DeveloperAgent(
+                    self.model,
+                    skill_level=1.0,
+                    sampler=getattr(self.model, "sampler", None),
+                )
                 self.team_members.append(new_dev)
                 self.model.schedule.add(new_dev)
 
