@@ -21,6 +21,9 @@ INTERNAL_METRIC_COLUMNS = [
     "avg_motivation",
     "min_energy",
     "avg_knowledge",
+    "avg_team_domain_knowledge",
+    "min_team_domain_knowledge",
+    "domain_coverage",
     "attrition_count",
     "coaching_count",
     "remaining_backlog",
@@ -45,6 +48,19 @@ RESULT_COLUMNS = [
     "seed",
     "num_sprints",
 ] + PARAM_COLUMNS + METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS
+
+
+SUMMARY_COLUMN_RENAMES = {
+    "min_energymean": "min_energy mean",
+}
+
+
+def normalize_summary_column(column):
+    return SUMMARY_COLUMN_RENAMES.get(column, column)
+
+
+def summary_metric_column(metric, stat):
+    return normalize_summary_column(f"{metric} {stat}")
 
 
 def scenario_a_conditions():
@@ -164,18 +180,25 @@ def summarize_results(rows):
 
         for metric in METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS:
             values = [float(row[metric]) for row in condition_rows if row[metric] != ""]
-            summary[f"{metric} mean"] = statistics.mean(values) if values else ""
-            summary[f"{metric} std"] = statistics.stdev(values) if len(values) > 1 else 0.0
+            summary[summary_metric_column(metric, "mean")] = statistics.mean(values) if values else ""
+            summary[summary_metric_column(metric, "std")] = statistics.stdev(values) if len(values) > 1 else 0.0
         summary_rows.append(summary)
     return summary_rows
 
 
 def write_csv(path, rows, fieldnames):
     path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [normalize_summary_column(fieldname) for fieldname in fieldnames]
+    normalized_rows = []
+    for row in rows:
+        normalized_rows.append({
+            normalize_summary_column(key): value
+            for key, value in row.items()
+        })
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(normalized_rows)
 
 
 def parse_args():
@@ -211,7 +234,10 @@ def main():
         "num_sprints",
     ] + PARAM_COLUMNS
     for metric in METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS:
-        summary_columns.extend([f"{metric} mean", f"{metric} std"])
+        summary_columns.extend([
+            summary_metric_column(metric, "mean"),
+            summary_metric_column(metric, "std"),
+        ])
 
     write_csv(args.output_dir / "experiment_results.csv", rows, RESULT_COLUMNS)
     write_csv(args.output_dir / "experiment_summary.csv", summary_rows, summary_columns)

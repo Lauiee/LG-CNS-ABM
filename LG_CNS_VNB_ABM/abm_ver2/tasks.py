@@ -17,6 +17,17 @@ TASK_TYPE_DIST = (
     ["testing"] * 15 + ["deploying"] * 10 + ["incident"] * 5
 )
 
+TASK_DOMAINS = ["frontend", "backend", "data", "infra", "legacy", "testing"]
+
+TASK_DOMAIN_DIST = (
+    ["backend"] * 30 +
+    ["frontend"] * 20 +
+    ["data"] * 15 +
+    ["infra"] * 10 +
+    ["legacy"] * 15 +
+    ["testing"] * 10
+)
+
 INCIDENT_PRIORITY_DIST = ["Low"] * 40 + ["Medium"] * 30 + ["High"] * 20 + ["Critical"] * 10
 
 INCIDENT_ENERGY_COST = {"Low": 5, "Medium": 10, "High": 20, "Critical": 30}
@@ -29,11 +40,16 @@ def _next_id():
     return _task_counter
 
 
+def _random_task_domain() -> str:
+    return random.choice(TASK_DOMAIN_DIST)
+
+
 @dataclass
 class Task:
     task_id: int = field(default_factory=_next_id)
     task_type: str = "coding"
     complexity: str = "C2"
+    domain: str = "backend"
     priority: str = "Medium"          # incident 전용
     status: str = "backlog"           # backlog / in_progress / review_pending / done
     assigned_to: Optional[int] = None
@@ -73,6 +89,7 @@ def create_random_task(step: int, task_type: str = None, incident_priority: str 
     return Task(
         task_type=t_type,
         complexity=complexity,
+        domain=_random_task_domain(),
         status="backlog",
         created_step=step,
         is_new_capability=is_new,
@@ -82,9 +99,11 @@ def create_random_task(step: int, task_type: str = None, incident_priority: str 
 def create_incident_task(step: int, priority: str = None, caused_by: int = None) -> Task:
     priority = priority or random.choice(INCIDENT_PRIORITY_DIST)
     complexity_map = {"Low": "C1", "Medium": "C2", "High": "C3", "Critical": "C4"}
+    domain = _random_task_domain()
     return Task(
         task_type="incident",
         complexity=complexity_map[priority],
+        domain=domain,
         priority=priority,
         status="backlog",
         created_step=step,

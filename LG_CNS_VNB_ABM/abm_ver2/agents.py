@@ -1,7 +1,7 @@
 import random
 import math
 from mesa import Agent
-from tasks import Task, create_incident_task, INCIDENT_ENERGY_COST
+from tasks import Task, create_incident_task, INCIDENT_ENERGY_COST, TASK_DOMAINS
 
 SKILL_PRODUCTIVITY = {0.5: 0.70, 1.0: 0.80, 1.5: 0.90, 2.0: 1.00, 2.5: 1.10, 3.0: 1.25, 5.0: 1.65}
 
@@ -44,6 +44,30 @@ def _skill_coeff(skill_level: float) -> float:
             t = (skill_level - prev) / (lv - prev)
             return SKILL_PRODUCTIVITY[prev] + t * (SKILL_PRODUCTIVITY[lv] - SKILL_PRODUCTIVITY[prev])
     return SKILL_PRODUCTIVITY[levels[-1]]
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _init_domain_knowledge(skill_level: float) -> dict:
+    base = min(1.0, 0.25 + 0.25 * skill_level)
+    values = {
+        domain: _clamp01(base + random.uniform(-0.12, 0.12))
+        for domain in TASK_DOMAINS
+    }
+
+    domains = list(TASK_DOMAINS)
+    random.shuffle(domains)
+    strong_count = random.randint(1, 2)
+    weak_count = random.randint(1, 2)
+
+    for domain in domains[:strong_count]:
+        values[domain] = _clamp01(values[domain] + random.uniform(0.10, 0.20))
+    for domain in domains[strong_count:strong_count + weak_count]:
+        values[domain] = _clamp01(values[domain] - random.uniform(0.10, 0.20))
+
+    return values
 
 
 class DeveloperAgent(Agent):
@@ -128,6 +152,8 @@ class DeveloperAgent(Agent):
                 default=0.0,
                 context=context,
             )
+
+        self.domain_knowledge = _init_domain_knowledge(self.skill_level)
 
         # 행동 상태
         self.state = "Idle"
@@ -304,6 +330,7 @@ class DeveloperAgent(Agent):
             deploy = T(
                 task_type="deploying",
                 complexity=task.complexity,
+                domain=task.domain,
                 status="backlog",
                 created_step=task.created_step,
                 is_new_capability=task.is_new_capability,

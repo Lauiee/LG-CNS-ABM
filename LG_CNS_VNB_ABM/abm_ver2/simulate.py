@@ -5,6 +5,31 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 from model import LGCNSDevModel
+from tasks import TASK_DOMAINS
+
+
+def _domain_knowledge_metrics(active_developers: list) -> dict:
+    values = []
+    for dev in active_developers:
+        values.extend(dev.domain_knowledge.get(domain, 0.0) for domain in TASK_DOMAINS)
+
+    covered_domains = sum(
+        1 for domain in TASK_DOMAINS
+        if any(dev.domain_knowledge.get(domain, 0.0) >= 0.6 for dev in active_developers)
+    )
+
+    if not values:
+        return {
+            "avg_team_domain_knowledge": 0.0,
+            "min_team_domain_knowledge": 0.0,
+            "domain_coverage": 0.0,
+        }
+
+    return {
+        "avg_team_domain_knowledge": round(sum(values) / len(values), 2),
+        "min_team_domain_knowledge": round(min(values), 2),
+        "domain_coverage": round(covered_domains / max(len(TASK_DOMAINS), 1), 2),
+    }
 
 
 def run_simulation(params: dict) -> dict:
@@ -65,11 +90,15 @@ def run_simulation(params: dict) -> dict:
         snapshots.append(snapshot)
 
     active = [d for d in m.developers if not d.attrited]
+    domain_metrics = _domain_knowledge_metrics(active)
     internal_metrics = {
         "avg_energy": round(sum(d.energy for d in active) / max(len(active), 1), 2),
         "avg_motivation": round(sum(d.motivation for d in active) / max(len(active), 1), 2),
         "min_energy": round(min((d.energy for d in active), default=0), 2),
         "avg_knowledge": round(sum(d.knowledge for d in active) / max(len(active), 1), 2),
+        "avg_team_domain_knowledge": domain_metrics["avg_team_domain_knowledge"],
+        "min_team_domain_knowledge": domain_metrics["min_team_domain_knowledge"],
+        "domain_coverage": domain_metrics["domain_coverage"],
         "attrition_count": m.metrics["attrition_count"],
         "coaching_count": sum(pl.coaching_count for pl in m.pls),
         "remaining_backlog": len(m.backlog),
