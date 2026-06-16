@@ -3,3 +3,7 @@
 **/.DS_Store
 LG_CNS_VNB_ABM/abm_ver2/outputs/
 .DS_Store
+
+# Python cache
+__pycache__/
+*.py[cod]
