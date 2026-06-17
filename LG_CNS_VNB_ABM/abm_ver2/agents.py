@@ -7,6 +7,12 @@ SKILL_PRODUCTIVITY = {0.5: 0.70, 1.0: 0.80, 1.5: 0.90, 2.0: 1.00, 2.5: 1.10, 3.0
 
 STATES = ["Coding", "FlowCoding", "Reviewing", "Communicating", "Learning", "Interrupted", "Burnout", "Idle"]
 
+HELP_PROGRESS_BOOST = 0.05
+HELP_KNOWLEDGE_GAIN = 0.01
+HELP_MOTIVATION_GAIN = 1.0
+HELPER_ENERGY_COST = 1.5
+HELPER_FLOW_RESET_PROB = 0.25
+
 STATE_COLORS = {
     "Coding":        "#378ADD",
     "FlowCoding":    "#639922",
@@ -68,6 +74,22 @@ def _init_domain_knowledge(skill_level: float) -> dict:
         values[domain] = _clamp01(values[domain] - random.uniform(0.10, 0.20))
 
     return values
+
+
+def _avg_domain_knowledge(domain_knowledge: dict) -> float:
+    if not domain_knowledge:
+        return 0.0
+    return sum(domain_knowledge.values()) / len(domain_knowledge)
+
+
+def _init_help_seeking_tendency(skill_level: float) -> float:
+    return _clamp01(0.8 - 0.18 * skill_level + random.uniform(-0.05, 0.05))
+
+
+def _init_mentoring_tendency(skill_level: float, domain_knowledge: dict) -> float:
+    skill_factor = min(1.0, skill_level / 3.0)
+    knowledge_factor = _avg_domain_knowledge(domain_knowledge)
+    return _clamp01(0.2 + 0.4 * skill_factor + 0.4 * knowledge_factor + random.uniform(-0.05, 0.05))
 
 
 class DeveloperAgent(Agent):
@@ -154,6 +176,11 @@ class DeveloperAgent(Agent):
             )
 
         self.domain_knowledge = _init_domain_knowledge(self.skill_level)
+        self.help_seeking_tendency = _init_help_seeking_tendency(self.skill_level)
+        self.mentoring_tendency = _init_mentoring_tendency(
+            self.skill_level,
+            self.domain_knowledge,
+        )
 
         # 행동 상태
         self.state = "Idle"
@@ -167,6 +194,11 @@ class DeveloperAgent(Agent):
         self.coding_steps = 0
         self.total_steps = 0
         self.interrupted_steps = 0
+        self.help_requests_made = 0
+        self.help_requests_received = 0
+        self.help_requests_resolved = 0
+        self.mentoring_load = 0.0
+        self.knowledge_gained_from_help = 0.0
 
     @property
     def skill_coeff(self) -> float:
@@ -251,6 +283,7 @@ class DeveloperAgent(Agent):
         eff_steps = self.current_task.effective_steps(self.skill_level)
         progress_per_step = self.productivity / max(eff_steps, 0.1)
         self.current_task.progress += progress_per_step
+        self._maybe_request_help(self.current_task)
         self.energy = max(0, self.energy - 2)  # 코딩 소모 완화
 
         # tech debt 누적
@@ -320,6 +353,9 @@ class DeveloperAgent(Agent):
         )
         clarity_factor = 1 - self.model.clarity_defect_reduction * self.model.requirement_clarity
         defect_chance = max(0.0, defect_chance * clarity_factor)
+        help_received_count = getattr(task, "help_received_count", 0)
+        if help_received_count:
+            defect_chance *= max(0.7, 1 - 0.05 * help_received_count)
         if random.random() < defect_chance:
             incident = create_incident_task(self.model.current_step, caused_by=task.task_id)
             self.model.backlog.append(incident)
@@ -336,6 +372,68 @@ class DeveloperAgent(Agent):
                 is_new_capability=task.is_new_capability,
             )
             self.model.backlog.append(deploy)
+
+    def _maybe_request_help(self, task: Task):
+        current_knowledge = self.domain_knowledge.get(task.domain, 0.0)
+        knowledge_gap = max(0.0, task.required_domain_knowledge - current_knowledge)
+        if not knowledge_gap:
+            return
+
+        help_prob = min(1.0, knowledge_gap * self.help_seeking_tendency)
+        if random.random() >= help_prob:
+            return
+
+        self.help_requests_made += 1
+        self.model.metrics["help_requests_total"] += 1
+
+        helper = self._select_helper(task.domain, current_knowledge)
+        if helper is None:
+            return
+
+        self._apply_help_success(task, helper)
+
+    def _select_helper(self, domain: str, requester_knowledge: float):
+        candidates = [
+            dev for dev in self.model.developers
+            if dev is not self and
+            not dev.attrited and
+            dev.domain_knowledge.get(domain, 0.0) > requester_knowledge
+        ]
+        if not candidates:
+            return None
+        return max(
+            candidates,
+            key=lambda dev: (
+                dev.mentoring_tendency,
+                dev.domain_knowledge.get(domain, 0.0),
+                dev.energy,
+            ),
+        )
+
+    def _apply_help_success(self, task: Task, helper: "DeveloperAgent"):
+        task.progress += HELP_PROGRESS_BOOST
+        task.help_received_count = getattr(task, "help_received_count", 0) + 1
+
+        new_knowledge = _clamp01(
+            self.domain_knowledge.get(task.domain, 0.0) + HELP_KNOWLEDGE_GAIN
+        )
+        self.domain_knowledge[task.domain] = new_knowledge
+        self.knowledge_gained_from_help += HELP_KNOWLEDGE_GAIN
+        self.motivation = min(100, self.motivation + HELP_MOTIVATION_GAIN)
+        self.help_requests_resolved += 1
+
+        helper.energy = max(0, helper.energy - HELPER_ENERGY_COST)
+        helper.mentoring_load += HELPER_ENERGY_COST
+        helper.help_requests_received += 1
+
+        self.model.metrics["help_requests_resolved"] += 1
+        self.model.metrics["knowledge_gained_from_help_total"] += HELP_KNOWLEDGE_GAIN
+        self.model.metrics["mentoring_load_total"] += HELPER_ENERGY_COST
+
+        if helper.current_task is not None:
+            self.model.metrics["helper_interruptions"] += 1
+            if random.random() < HELPER_FLOW_RESET_PROB:
+                helper.flow_streak = 0
 
     def _do_communicating(self):
         self.energy = max(0, self.energy - 3)

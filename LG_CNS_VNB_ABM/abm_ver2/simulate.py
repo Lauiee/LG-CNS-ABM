@@ -91,6 +91,8 @@ def run_simulation(params: dict) -> dict:
 
     active = [d for d in m.developers if not d.attrited]
     domain_metrics = _domain_knowledge_metrics(active)
+    help_requests_total = m.metrics["help_requests_total"]
+    help_requests_resolved = m.metrics["help_requests_resolved"]
     internal_metrics = {
         "avg_energy": round(sum(d.energy for d in active) / max(len(active), 1), 2),
         "avg_motivation": round(sum(d.motivation for d in active) / max(len(active), 1), 2),
@@ -99,6 +101,19 @@ def run_simulation(params: dict) -> dict:
         "avg_team_domain_knowledge": domain_metrics["avg_team_domain_knowledge"],
         "min_team_domain_knowledge": domain_metrics["min_team_domain_knowledge"],
         "domain_coverage": domain_metrics["domain_coverage"],
+        "help_requests_total": help_requests_total,
+        "help_requests_resolved": help_requests_resolved,
+        "help_request_resolution_rate": round(
+            help_requests_resolved / help_requests_total
+            if help_requests_total else 0.0,
+            2,
+        ),
+        "mentoring_load_total": round(m.metrics["mentoring_load_total"], 2),
+        "avg_knowledge_gain_from_help": round(
+            m.metrics["knowledge_gained_from_help_total"] / max(len(active), 1),
+            4,
+        ),
+        "helper_interruptions": m.metrics["helper_interruptions"],
         "attrition_count": m.metrics["attrition_count"],
         "coaching_count": sum(pl.coaching_count for pl in m.pls),
         "remaining_backlog": len(m.backlog),

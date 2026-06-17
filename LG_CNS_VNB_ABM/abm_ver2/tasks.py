@@ -10,6 +10,14 @@ COMPLEXITY_CONFIG = {
     "C5": {"required_skill": 2.5, "base_steps": 8, "defect_prob": 0.40},
 }
 
+DOMAIN_KNOWLEDGE_REQUIREMENT = {
+    "C1": 0.2,
+    "C2": 0.35,
+    "C3": 0.5,
+    "C4": 0.65,
+    "C5": 0.8,
+}
+
 COMPLEXITY_DIST = ["C1"] * 20 + ["C2"] * 35 + ["C3"] * 25 + ["C4"] * 15 + ["C5"] * 5
 
 TASK_TYPE_DIST = (
@@ -58,10 +66,15 @@ class Task:
     progress: float = 0.0             # 0.0 ~ 1.0
     is_new_capability: bool = True    # % Time on New Capabilities 계산용
     caused_by_task_id: Optional[int] = None  # rework 원인 태스크
+    help_received_count: int = 0
 
     @property
     def required_skill(self) -> float:
         return COMPLEXITY_CONFIG[self.complexity]["required_skill"]
+
+    @property
+    def required_domain_knowledge(self) -> float:
+        return DOMAIN_KNOWLEDGE_REQUIREMENT[self.complexity]
 
     @property
     def base_steps(self) -> int:
