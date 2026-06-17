@@ -28,6 +28,18 @@ SKILL_DISTRIBUTION = [
     (0.5, 1), (1.0, 2), (1.5, 3), (2.0, 2), (2.5, 1)
 ]
 
+TEAM_COMPOSITIONS = {
+    "junior_heavy": {"junior": 5, "middle": 3, "senior": 1},
+    "balanced": {"junior": 3, "middle": 4, "senior": 2},
+    "senior_heavy": {"junior": 1, "middle": 4, "senior": 4},
+}
+
+ROLE_SKILL_LEVELS = {
+    "junior": [0.5, 1.0],
+    "middle": [1.5, 2.0],
+    "senior": [2.5, 3.0],
+}
+
 
 class LGCNSDevModel(Model):
     def __init__(
@@ -48,6 +60,8 @@ class LGCNSDevModel(Model):
         seed: int = 42,
         sampler=None,
         distribution_overrides=None,
+        team_composition: str = None,
+        mentoring_intensity: float = None,
     ):
         super().__init__(seed=seed)
         random.seed(seed)
@@ -71,6 +85,9 @@ class LGCNSDevModel(Model):
         self.knowledge_decay_rate = knowledge_decay_rate
         self.collaboration_tendency = collaboration_tendency
         self.sprint_backlog_size = sprint_backlog_size
+        self.team_composition = team_composition
+        self.role_based_team = team_composition in TEAM_COMPOSITIONS
+        self.mentoring_intensity = mentoring_intensity
         self.review_defect_reduction = 0.6
         self.review_cost_slope = 0.8
         self.target_wip_per_dev = 5.0
@@ -104,6 +121,11 @@ class LGCNSDevModel(Model):
             "total_dev_steps": 0,
             "attrition_count": 0,
             "sprint_velocities": [],
+            "help_requests_total": 0,
+            "help_requests_resolved": 0,
+            "mentoring_load_total": 0.0,
+            "knowledge_gained_from_help_total": 0.0,
+            "helper_interruptions": 0,
             # 시계열
             "step_history": [],
             "avg_energy_history": [],
@@ -118,16 +140,13 @@ class LGCNSDevModel(Model):
 
         # Developer Agent 생성
         self.developers: list[DeveloperAgent] = []
-        skill_pool = []
-        for skill, count in SKILL_DISTRIBUTION:
-            skill_pool.extend([skill] * count)
-        while len(skill_pool) < num_developers:
-            skill_pool.append(1.5)
-        random.shuffle(skill_pool)
+        role_pool = self._build_role_pool(num_developers)
+        skill_pool = self._build_skill_pool(num_developers, role_pool)
 
         for i in range(num_developers):
+            role = role_pool[i] if role_pool else None
             skill = skill_pool[i] if i < len(skill_pool) else 1.5
-            dev = DeveloperAgent(self, skill_level=skill, sampler=self.sampler)
+            dev = DeveloperAgent(self, skill_level=skill, sampler=self.sampler, role=role)
             self.developers.append(dev)
             self.schedule.add(dev)
 
@@ -141,6 +160,35 @@ class LGCNSDevModel(Model):
 
         # 초기 백로그 생성
         self._generate_backlog(sprint_backlog_size * num_sprints)
+
+    def _build_role_pool(self, num_developers: int):
+        if self.team_composition not in TEAM_COMPOSITIONS:
+            return None
+
+        role_pool = []
+        for role, count in TEAM_COMPOSITIONS[self.team_composition].items():
+            role_pool.extend([role] * count)
+        while len(role_pool) < num_developers:
+            role_pool.append("middle")
+        role_pool = role_pool[:num_developers]
+        random.shuffle(role_pool)
+        return role_pool
+
+    def _sample_skill_for_role(self, role: str) -> float:
+        levels = ROLE_SKILL_LEVELS.get(role, [1.5])
+        return random.choice(levels)
+
+    def _build_skill_pool(self, num_developers: int, role_pool):
+        if role_pool:
+            return [self._sample_skill_for_role(role) for role in role_pool]
+
+        skill_pool = []
+        for skill, count in SKILL_DISTRIBUTION:
+            skill_pool.extend([skill] * count)
+        while len(skill_pool) < num_developers:
+            skill_pool.append(1.5)
+        random.shuffle(skill_pool)
+        return skill_pool
 
     def _generate_backlog(self, count: int):
         for _ in range(count):

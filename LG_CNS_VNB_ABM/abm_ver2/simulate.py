@@ -32,6 +32,24 @@ def _domain_knowledge_metrics(active_developers: list) -> dict:
     }
 
 
+def _role_metrics(active_developers: list) -> dict:
+    juniors = [d for d in active_developers if getattr(d, "role", None) == "junior"]
+    middles = [d for d in active_developers if getattr(d, "role", None) == "middle"]
+    seniors = [d for d in active_developers if getattr(d, "role", None) == "senior"]
+
+    return {
+        "junior_count": len(juniors),
+        "middle_count": len(middles),
+        "senior_count": len(seniors),
+        "junior_avg_knowledge": round(
+            sum(d.knowledge for d in juniors) / max(len(juniors), 1),
+            2,
+        ),
+        "senior_mentoring_load": round(sum(d.mentoring_load for d in seniors), 2),
+        "junior_help_requests": sum(d.help_requests_made for d in juniors),
+    }
+
+
 def run_simulation(params: dict) -> dict:
     m = LGCNSDevModel(
         num_developers=params.get("num_developers", 9),
@@ -45,6 +63,8 @@ def run_simulation(params: dict) -> dict:
         sprint_backlog_size=params.get("sprint_backlog_size", 30),
         seed=params.get("seed", 42),
         distribution_overrides=params.get("distribution_overrides"),
+        team_composition=params.get("team_composition"),
+        mentoring_intensity=params.get("mentoring_intensity"),
     )
 
     snapshots = []
@@ -57,6 +77,7 @@ def run_simulation(params: dict) -> dict:
             "agents": [{
                 "id": d.unique_id,
                 "skill": d.skill_level,
+                "role": getattr(d, "role", None),
                 "energy": round(d.energy, 1),
                 "motivation": round(d.motivation, 1),
                 "knowledge": round(d.knowledge, 1),
@@ -91,6 +112,7 @@ def run_simulation(params: dict) -> dict:
 
     active = [d for d in m.developers if not d.attrited]
     domain_metrics = _domain_knowledge_metrics(active)
+    role_metrics = _role_metrics(active)
     help_requests_total = m.metrics["help_requests_total"]
     help_requests_resolved = m.metrics["help_requests_resolved"]
     internal_metrics = {
@@ -114,6 +136,12 @@ def run_simulation(params: dict) -> dict:
             4,
         ),
         "helper_interruptions": m.metrics["helper_interruptions"],
+        "junior_count": role_metrics["junior_count"],
+        "middle_count": role_metrics["middle_count"],
+        "senior_count": role_metrics["senior_count"],
+        "junior_avg_knowledge": role_metrics["junior_avg_knowledge"],
+        "senior_mentoring_load": role_metrics["senior_mentoring_load"],
+        "junior_help_requests": role_metrics["junior_help_requests"],
         "attrition_count": m.metrics["attrition_count"],
         "coaching_count": sum(pl.coaching_count for pl in m.pls),
         "remaining_backlog": len(m.backlog),

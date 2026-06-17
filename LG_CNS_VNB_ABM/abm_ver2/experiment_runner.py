@@ -30,6 +30,12 @@ INTERNAL_METRIC_COLUMNS = [
     "mentoring_load_total",
     "avg_knowledge_gain_from_help",
     "helper_interruptions",
+    "junior_count",
+    "middle_count",
+    "senior_count",
+    "junior_avg_knowledge",
+    "senior_mentoring_load",
+    "junior_help_requests",
     "attrition_count",
     "coaching_count",
     "remaining_backlog",
@@ -45,6 +51,8 @@ PARAM_COLUMNS = [
     "codebase_stability",
     "sprint_backlog_size",
     "team_awareness",
+    "team_composition",
+    "mentoring_intensity",
 ]
 
 RESULT_COLUMNS = [
@@ -56,7 +64,6 @@ RESULT_COLUMNS = [
 ] + PARAM_COLUMNS + METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS
 
 
-SUMMARY_STATS = ("mean", "std")
 SUMMARY_BASE_COLUMNS = [
     "scenario_id",
     "condition_id",
@@ -65,26 +72,28 @@ SUMMARY_BASE_COLUMNS = [
 ] + PARAM_COLUMNS
 
 
-def summary_metric_columns():
-    columns = []
-    for metric in METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS:
-        for stat in SUMMARY_STATS:
-            columns.append(summary_metric_column(metric, stat))
-    return columns
-
-
 def summary_metric_column(metric, stat):
     return f"{metric} {stat}"
 
 
+def summary_metric_columns(metric):
+    return [
+        summary_metric_column(metric, "mean"),
+        summary_metric_column(metric, "std"),
+    ]
+
+
 def summary_fieldnames():
-    return SUMMARY_BASE_COLUMNS + summary_metric_columns()
+    columns = list(SUMMARY_BASE_COLUMNS)
+    for metric in METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS:
+        columns.extend(summary_metric_columns(metric))
+    return columns
 
 
 def normalize_summary_column(column):
     for metric in METRIC_COLUMNS + INTERNAL_METRIC_COLUMNS:
-        for stat in SUMMARY_STATS:
-            canonical = summary_metric_column(metric, stat)
+        for canonical in summary_metric_columns(metric):
+            stat = canonical.rsplit(" ", 1)[1]
             if column in (canonical, f"{metric}{stat}"):
                 return canonical
     return column
@@ -95,6 +104,11 @@ def normalize_summary_row(row):
         normalize_summary_column(key): value
         for key, value in row.items()
     }
+
+
+def summary_row_values(row, fieldnames):
+    normalized_row = normalize_summary_row(row)
+    return [normalized_row.get(fieldname, "") for fieldname in fieldnames]
 
 
 def scenario_a_conditions():
@@ -148,6 +162,21 @@ def scenario_c_conditions():
     return conditions
 
 
+def scenario_d_conditions():
+    conditions = []
+    condition_index = 1
+    for team_composition in ["junior_heavy", "balanced", "senior_heavy"]:
+        for mentoring_intensity in [0.3, 0.8]:
+            conditions.append({
+                "scenario_id": "D",
+                "condition_id": f"D{condition_index}",
+                "team_composition": team_composition,
+                "mentoring_intensity": mentoring_intensity,
+            })
+            condition_index += 1
+    return conditions
+
+
 def get_conditions(scenario_id):
     if scenario_id == "A":
         return scenario_a_conditions()
@@ -155,6 +184,8 @@ def get_conditions(scenario_id):
         return scenario_b_conditions()
     if scenario_id == "C":
         return scenario_c_conditions()
+    if scenario_id == "D":
+        return scenario_d_conditions()
     raise ValueError(f"Unsupported scenario: {scenario_id}")
 
 
@@ -229,13 +260,18 @@ def write_csv(path, rows, fieldnames):
 
 
 def write_summary_csv(path, rows):
-    normalized_rows = [normalize_summary_row(row) for row in rows]
-    write_csv(path, normalized_rows, summary_fieldnames())
+    fieldnames = summary_fieldnames()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(fieldnames)
+        for row in rows:
+            writer.writerow(summary_row_values(row, fieldnames))
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run scenario-based ABM experiments.")
-    parser.add_argument("--scenario", default="B", choices=["A", "B", "C"])
+    parser.add_argument("--scenario", default="B", choices=["A", "B", "C", "D"])
     parser.add_argument("--runs", type=int, default=30)
     parser.add_argument("--sprints", type=int, default=6)
     parser.add_argument("--seed-start", type=int, default=1000)

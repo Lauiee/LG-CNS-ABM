@@ -13,6 +13,8 @@ HELP_MOTIVATION_GAIN = 1.0
 HELPER_ENERGY_COST = 1.5
 HELPER_FLOW_RESET_PROB = 0.25
 
+ROLES = ["junior", "middle", "senior"]
+
 STATE_COLORS = {
     "Coding":        "#378ADD",
     "FlowCoding":    "#639922",
@@ -92,8 +94,16 @@ def _init_mentoring_tendency(skill_level: float, domain_knowledge: dict) -> floa
     return _clamp01(0.2 + 0.4 * skill_factor + 0.4 * knowledge_factor + random.uniform(-0.05, 0.05))
 
 
+def _role_from_skill(skill_level: float) -> str:
+    if skill_level <= 1.0:
+        return "junior"
+    if skill_level >= 2.5:
+        return "senior"
+    return "middle"
+
+
 class DeveloperAgent(Agent):
-    def __init__(self, model, skill_level: float = 1.5, sampler=None):
+    def __init__(self, model, skill_level: float = 1.5, sampler=None, role: str = None):
         _init_mesa_agent(self, model)
         if sampler is None:
             # 정적 속성
@@ -175,12 +185,16 @@ class DeveloperAgent(Agent):
                 context=context,
             )
 
+        explicit_role = role in ROLES
+        self.role = role if explicit_role else _role_from_skill(self.skill_level)
         self.domain_knowledge = _init_domain_knowledge(self.skill_level)
         self.help_seeking_tendency = _init_help_seeking_tendency(self.skill_level)
         self.mentoring_tendency = _init_mentoring_tendency(
             self.skill_level,
             self.domain_knowledge,
         )
+        if explicit_role:
+            self._apply_role_profile()
 
         # 행동 상태
         self.state = "Idle"
@@ -217,6 +231,13 @@ class DeveloperAgent(Agent):
     def color(self) -> str:
         return STATE_COLORS.get(self.state, "#888780")
 
+    @property
+    def effective_mentoring_tendency(self) -> float:
+        intensity = getattr(self.model, "mentoring_intensity", None)
+        if intensity is None:
+            return self.mentoring_tendency
+        return _clamp01(self.mentoring_tendency * intensity)
+
     def is_available(self) -> bool:
         return (not self.attrited and
                 self.energy > self.burnout_threshold and
@@ -229,6 +250,24 @@ class DeveloperAgent(Agent):
         task.status = "in_progress"
         self.state = "Coding"
         self.flow_streak = 0
+
+    def _apply_role_profile(self):
+        if self.role == "junior":
+            self.learning_rate = max(0.1, self.learning_rate * 1.25)
+            self.domain_knowledge = {
+                domain: _clamp01(value - 0.10)
+                for domain, value in self.domain_knowledge.items()
+            }
+            self.help_seeking_tendency = _clamp01(self.help_seeking_tendency + 0.15)
+            self.mentoring_tendency = _clamp01(self.mentoring_tendency - 0.20)
+        elif self.role == "senior":
+            self.learning_rate = max(0.1, self.learning_rate * 0.85)
+            self.domain_knowledge = {
+                domain: _clamp01(value + 0.10)
+                for domain, value in self.domain_knowledge.items()
+            }
+            self.help_seeking_tendency = _clamp01(self.help_seeking_tendency - 0.15)
+            self.mentoring_tendency = _clamp01(self.mentoring_tendency + 0.20)
 
     def step(self):
         if self.attrited:
@@ -389,6 +428,9 @@ class DeveloperAgent(Agent):
         helper = self._select_helper(task.domain, current_knowledge)
         if helper is None:
             return
+        intensity = getattr(self.model, "mentoring_intensity", None)
+        if intensity is not None and random.random() >= helper.effective_mentoring_tendency:
+            return
 
         self._apply_help_success(task, helper)
 
@@ -404,7 +446,7 @@ class DeveloperAgent(Agent):
         return max(
             candidates,
             key=lambda dev: (
-                dev.mentoring_tendency,
+                dev.effective_mentoring_tendency,
                 dev.domain_knowledge.get(domain, 0.0),
                 dev.energy,
             ),
@@ -652,10 +694,17 @@ class PLAgent(Agent):
             if dev.attrited:
                 self.team_members.remove(dev)
                 self.model.metrics["attrition_count"] += 1
+                replacement_role = getattr(dev, "role", None) if getattr(self.model, "role_based_team", False) else None
+                replacement_skill = (
+                    self.model._sample_skill_for_role(replacement_role)
+                    if replacement_role and callable(getattr(self.model, "_sample_skill_for_role", None))
+                    else 1.0
+                )
                 new_dev = DeveloperAgent(
                     self.model,
-                    skill_level=1.0,
+                    skill_level=replacement_skill,
                     sampler=getattr(self.model, "sampler", None),
+                    role=replacement_role,
                 )
                 self.team_members.append(new_dev)
                 self.model.schedule.add(new_dev)
