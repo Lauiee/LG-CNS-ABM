@@ -36,6 +36,13 @@ INTERNAL_METRIC_COLUMNS = [
     "junior_avg_knowledge",
     "senior_mentoring_load",
     "junior_help_requests",
+    "allocation_match_score",
+    "domain_mismatch_count",
+    "bottlenecks_detected",
+    "bottleneck_interventions",
+    "reassignments",
+    "clarification_events",
+    "effective_requirement_clarity",
     "attrition_count",
     "coaching_count",
     "remaining_backlog",
@@ -53,6 +60,10 @@ PARAM_COLUMNS = [
     "team_awareness",
     "team_composition",
     "mentoring_intensity",
+    "pm_profile",
+    "allocation_skill",
+    "bottleneck_detection",
+    "requirement_coordination",
 ]
 
 RESULT_COLUMNS = [
@@ -177,6 +188,32 @@ def scenario_d_conditions():
     return conditions
 
 
+def scenario_e_conditions():
+    profiles = [
+        ("weak_pm", 0.3, 0.3, 0.3),
+        ("allocation_focused_pm", 0.8, 0.3, 0.3),
+        ("bottleneck_focused_pm", 0.3, 0.8, 0.3),
+        ("requirement_focused_pm", 0.3, 0.3, 0.8),
+        ("strong_pm", 0.8, 0.8, 0.8),
+    ]
+    conditions = []
+    for condition_index, (
+        pm_profile,
+        allocation_skill,
+        bottleneck_detection,
+        requirement_coordination,
+    ) in enumerate(profiles, start=1):
+        conditions.append({
+            "scenario_id": "E",
+            "condition_id": f"E{condition_index}",
+            "pm_profile": pm_profile,
+            "allocation_skill": allocation_skill,
+            "bottleneck_detection": bottleneck_detection,
+            "requirement_coordination": requirement_coordination,
+        })
+    return conditions
+
+
 def get_conditions(scenario_id):
     if scenario_id == "A":
         return scenario_a_conditions()
@@ -186,6 +223,8 @@ def get_conditions(scenario_id):
         return scenario_c_conditions()
     if scenario_id == "D":
         return scenario_d_conditions()
+    if scenario_id == "E":
+        return scenario_e_conditions()
     raise ValueError(f"Unsupported scenario: {scenario_id}")
 
 
@@ -271,7 +310,7 @@ def write_summary_csv(path, rows):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run scenario-based ABM experiments.")
-    parser.add_argument("--scenario", default="B", choices=["A", "B", "C", "D"])
+    parser.add_argument("--scenario", default="B", choices=["A", "B", "C", "D", "E"])
     parser.add_argument("--runs", type=int, default=30)
     parser.add_argument("--sprints", type=int, default=6)
     parser.add_argument("--seed-start", type=int, default=1000)

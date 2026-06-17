@@ -247,6 +247,7 @@ class DeveloperAgent(Agent):
     def receive_task(self, task: Task):
         self.current_task = task
         task.assigned_to = self.unique_id
+        task.assigned_step = getattr(self.model, "current_step", task.created_step)
         task.status = "in_progress"
         self.state = "Coding"
         self.flow_streak = 0
@@ -321,6 +322,7 @@ class DeveloperAgent(Agent):
         self.coding_steps += 1
         eff_steps = self.current_task.effective_steps(self.skill_level)
         progress_per_step = self.productivity / max(eff_steps, 0.1)
+        progress_per_step *= getattr(self.current_task, "pm_allocation_progress_multiplier", 1.0)
         self.current_task.progress += progress_per_step
         self._maybe_request_help(self.current_task)
         self.energy = max(0, self.energy - 2)  # 코딩 소모 완화
@@ -390,8 +392,17 @@ class DeveloperAgent(Agent):
                 1 - self.model.review_defect_reduction * self.model.review_strictness
             ),
         )
-        clarity_factor = 1 - self.model.clarity_defect_reduction * self.model.requirement_clarity
+        clarity = getattr(
+            self.model,
+            "effective_requirement_clarity",
+            self.model.requirement_clarity,
+        )
+        clarity_factor = 1 - self.model.clarity_defect_reduction * clarity
         defect_chance = max(0.0, defect_chance * clarity_factor)
+        defect_chance = max(
+            0.0,
+            defect_chance * self.model.pm_requirement_quality_multiplier(),
+        )
         help_received_count = getattr(task, "help_received_count", 0)
         if help_received_count:
             defect_chance *= max(0.7, 1 - 0.05 * help_received_count)
@@ -419,6 +430,11 @@ class DeveloperAgent(Agent):
             return
 
         help_prob = min(1.0, knowledge_gap * self.help_seeking_tendency)
+        if getattr(task, "pm_optimized_allocation", False):
+            help_prob *= max(
+                0.75,
+                1 - 0.20 * getattr(self.model, "allocation_skill", 0.5),
+            )
         if random.random() >= help_prob:
             return
 
@@ -443,6 +459,16 @@ class DeveloperAgent(Agent):
         ]
         if not candidates:
             return None
+        if getattr(self.model, "pm_intervention_enabled", False):
+            load_weight = 0.05 * getattr(self.model, "bottleneck_detection", 0.5)
+            return max(
+                candidates,
+                key=lambda dev: (
+                    dev.effective_mentoring_tendency,
+                    dev.domain_knowledge.get(domain, 0.0) - dev.mentoring_load * load_weight,
+                    dev.energy,
+                ),
+            )
         return max(
             candidates,
             key=lambda dev: (
@@ -542,6 +568,10 @@ class PLAgent(Agent):
         self.state = "Idle"
         self.team_stress_level = 0.0
         self.coaching_count = 0
+        self.allocation_skill = getattr(model, "allocation_skill", 0.5)
+        self.bottleneck_detection = getattr(model, "bottleneck_detection", 0.5)
+        self.requirement_coordination = getattr(model, "requirement_coordination", 0.5)
+        self.pm_intervention_capacity = getattr(model, "pm_intervention_capacity", 2)
 
     @property
     def color(self):
@@ -613,34 +643,93 @@ class PLAgent(Agent):
             assignee.receive_task(inc)
             self.model.backlog.remove(inc)
 
-    def _assign_tasks(self):
-        available_devs = [d for d in self.team_members
-                          if d.is_available() and d.energy > 30]
-        backlog_tasks = [t for t in self.model.backlog
-                         if t.status == "backlog" and t.task_type != "incident"]
+    def _candidate_tasks_for_dev(self, dev, backlog_tasks: list[Task]) -> list[Task]:
+        suitable = [
+            task for task in backlog_tasks
+            if task.required_skill <= dev.skill_level + 1.0
+        ]
+        return suitable if suitable else backlog_tasks[:1]
 
+    def _choose_existing_assignment_task(self, dev, backlog_tasks: list[Task]):
+        suitable = self._candidate_tasks_for_dev(dev, backlog_tasks)
+        if not suitable:
+            return None
+
+        # knowledge 높은 dev에게 C4/C5 우선
+        high_complexity = [t for t in suitable if t.complexity in ["C4", "C5"]]
+        if high_complexity and dev.knowledge > 60:
+            return random.choice(high_complexity)
+
+        low_suitable = [t for t in suitable if t.complexity not in ["C4", "C5"]]
+        return random.choice(low_suitable) if low_suitable else random.choice(suitable)
+
+    def _choose_pm_best_fit_assignment(self, available_devs, backlog_tasks):
+        candidates = []
         for dev in available_devs:
-            if not backlog_tasks:
-                break
-            # complexity ≤ skill+1 범위 필터
-            suitable = [t for t in backlog_tasks
-                        if t.required_skill <= dev.skill_level + 1.0]
-            if not suitable:
-                suitable = backlog_tasks[:1]
+            for task in self._candidate_tasks_for_dev(dev, backlog_tasks):
+                domain_knowledge = dev.domain_knowledge.get(task.domain, 0.0)
+                knowledge_gap = max(0.0, task.required_domain_knowledge - domain_knowledge)
+                skill_fit = max(0.0, 1.0 - abs(task.required_skill - dev.skill_level) / 3.0)
+                energy_fit = max(0.0, min(1.0, dev.energy / 100.0))
+                load_fit = max(0.0, 1.0 - min(1.0, dev.mentoring_load / 20.0))
+                task_size_fit = max(0.0, 1.0 - (task.base_steps - 1) / 7.0)
+                balance_fit = 1.0 / (1.0 + dev.tasks_completed)
+                score = (
+                    domain_knowledge * 0.42 +
+                    skill_fit * 0.20 +
+                    energy_fit * 0.14 +
+                    load_fit * 0.10 +
+                    task_size_fit * 0.10 +
+                    balance_fit * 0.04 -
+                    knowledge_gap * 0.35
+                )
+                candidates.append((
+                    score,
+                    domain_knowledge,
+                    energy_fit,
+                    task_size_fit,
+                    dev,
+                    task,
+                ))
+        if not candidates:
+            return None, None
+        _, _, _, _, dev, task = max(candidates, key=lambda item: item[:4])
+        return dev, task
 
-            # knowledge 높은 dev에게 C4/C5 우선
-            high_complexity = [t for t in suitable if t.complexity in ["C4", "C5"]]
-            if high_complexity and dev.knowledge > 60:
-                task = random.choice(high_complexity)
-            else:
-                low_suitable = [t for t in suitable if t.complexity not in ["C4", "C5"]]
-                task = random.choice(low_suitable) if low_suitable else random.choice(suitable)
-
-            dev.receive_task(task)
+    def _assign_task_to_dev(self, dev, task, backlog_tasks: list[Task], pm_optimized: bool = False):
+        dev.receive_task(task)
+        self.model.record_task_allocation(dev, task, pm_optimized=pm_optimized)
+        if task in backlog_tasks:
             backlog_tasks.remove(task)
-            if task in self.model.backlog:
-                self.model.backlog.remove(task)
-        self.state = "TaskAssigning" if available_devs else "Idle"
+        if task in self.model.backlog:
+            self.model.backlog.remove(task)
+
+    def _assign_tasks(self):
+        available_devs = [
+            dev for dev in self.team_members
+            if dev.is_available() and dev.energy > 30
+        ]
+        had_available_devs = bool(available_devs)
+        backlog_tasks = [
+            task for task in self.model.backlog
+            if task.status == "backlog" and task.task_type != "incident"
+        ]
+
+        while available_devs and backlog_tasks:
+            pm_optimized = False
+            if self.model.should_use_pm_allocation():
+                dev, task = self._choose_pm_best_fit_assignment(available_devs, backlog_tasks)
+                pm_optimized = True
+            else:
+                dev = available_devs[0]
+                task = self._choose_existing_assignment_task(dev, backlog_tasks)
+
+            if dev is None or task is None:
+                break
+
+            self._assign_task_to_dev(dev, task, backlog_tasks, pm_optimized=pm_optimized)
+            available_devs.remove(dev)
+        self.state = "TaskAssigning" if had_available_devs else "Idle"
 
     def _assign_reviewer(self, task):
         candidates = [d for d in self.team_members

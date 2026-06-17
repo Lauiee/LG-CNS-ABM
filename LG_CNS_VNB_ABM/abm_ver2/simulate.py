@@ -65,6 +65,11 @@ def run_simulation(params: dict) -> dict:
         distribution_overrides=params.get("distribution_overrides"),
         team_composition=params.get("team_composition"),
         mentoring_intensity=params.get("mentoring_intensity"),
+        pm_profile=params.get("pm_profile"),
+        allocation_skill=params.get("allocation_skill"),
+        bottleneck_detection=params.get("bottleneck_detection"),
+        requirement_coordination=params.get("requirement_coordination"),
+        pm_intervention_capacity=params.get("pm_intervention_capacity", 2),
     )
 
     snapshots = []
@@ -115,6 +120,7 @@ def run_simulation(params: dict) -> dict:
     role_metrics = _role_metrics(active)
     help_requests_total = m.metrics["help_requests_total"]
     help_requests_resolved = m.metrics["help_requests_resolved"]
+    allocation_count = m.metrics["allocation_assignment_count"]
     internal_metrics = {
         "avg_energy": round(sum(d.energy for d in active) / max(len(active), 1), 2),
         "avg_motivation": round(sum(d.motivation for d in active) / max(len(active), 1), 2),
@@ -142,6 +148,17 @@ def run_simulation(params: dict) -> dict:
         "junior_avg_knowledge": role_metrics["junior_avg_knowledge"],
         "senior_mentoring_load": role_metrics["senior_mentoring_load"],
         "junior_help_requests": role_metrics["junior_help_requests"],
+        "allocation_match_score": round(
+            m.metrics["allocation_match_score_total"] / allocation_count
+            if allocation_count else 0.0,
+            3,
+        ),
+        "domain_mismatch_count": m.metrics["domain_mismatch_count"],
+        "bottlenecks_detected": m.metrics["bottlenecks_detected"],
+        "bottleneck_interventions": m.metrics["bottleneck_interventions"],
+        "reassignments": m.metrics["reassignments"],
+        "clarification_events": m.metrics["clarification_events"],
+        "effective_requirement_clarity": round(m.effective_requirement_clarity, 3),
         "attrition_count": m.metrics["attrition_count"],
         "coaching_count": sum(pl.coaching_count for pl in m.pls),
         "remaining_backlog": len(m.backlog),

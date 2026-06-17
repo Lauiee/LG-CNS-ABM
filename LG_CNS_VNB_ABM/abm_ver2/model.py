@@ -41,6 +41,10 @@ ROLE_SKILL_LEVELS = {
 }
 
 
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
 class LGCNSDevModel(Model):
     def __init__(
         self,
@@ -62,6 +66,11 @@ class LGCNSDevModel(Model):
         distribution_overrides=None,
         team_composition: str = None,
         mentoring_intensity: float = None,
+        pm_profile: str = None,
+        allocation_skill: float = None,
+        bottleneck_detection: float = None,
+        requirement_coordination: float = None,
+        pm_intervention_capacity: int = 2,
     ):
         super().__init__(seed=seed)
         random.seed(seed)
@@ -88,6 +97,27 @@ class LGCNSDevModel(Model):
         self.team_composition = team_composition
         self.role_based_team = team_composition in TEAM_COMPOSITIONS
         self.mentoring_intensity = mentoring_intensity
+        self.pm_profile = pm_profile
+        self.pm_intervention_enabled = any(
+            value is not None
+            for value in (
+                pm_profile,
+                allocation_skill,
+                bottleneck_detection,
+                requirement_coordination,
+            )
+        )
+        self.allocation_skill = _clamp01(0.5 if allocation_skill is None else allocation_skill)
+        self.bottleneck_detection = _clamp01(
+            0.5 if bottleneck_detection is None else bottleneck_detection
+        )
+        self.requirement_coordination = _clamp01(
+            0.5 if requirement_coordination is None else requirement_coordination
+        )
+        self.pm_intervention_capacity = max(0, int(pm_intervention_capacity))
+        self.pm_interventions_remaining = self.pm_intervention_capacity
+        self.pm_bottleneck_cooldown_steps = 2
+        self.last_bottleneck_intervention_step = -self.pm_bottleneck_cooldown_steps
         self.review_defect_reduction = 0.6
         self.review_cost_slope = 0.8
         self.target_wip_per_dev = 5.0
@@ -100,6 +130,7 @@ class LGCNSDevModel(Model):
         self.meeting_motivation_cost = 0.1
         self.meeting_flow_disruption_prob = 0.08
         self.clarity_defect_reduction = 0.6
+        self.effective_requirement_clarity = self._calculate_effective_requirement_clarity()
 
         # 상태
         self.current_step = 0
@@ -126,6 +157,13 @@ class LGCNSDevModel(Model):
             "mentoring_load_total": 0.0,
             "knowledge_gained_from_help_total": 0.0,
             "helper_interruptions": 0,
+            "allocation_match_score_total": 0.0,
+            "allocation_assignment_count": 0,
+            "domain_mismatch_count": 0,
+            "bottlenecks_detected": 0,
+            "bottleneck_interventions": 0,
+            "reassignments": 0,
+            "clarification_events": 0,
             # 시계열
             "step_history": [],
             "avg_energy_history": [],
@@ -197,6 +235,215 @@ class LGCNSDevModel(Model):
             ))
             self.backlog.append(task)
 
+    def _calculate_effective_requirement_clarity(self) -> float:
+        if not self.pm_intervention_enabled:
+            return _clamp01(self.requirement_clarity)
+        return _clamp01(
+            self.requirement_clarity + 0.35 * self.requirement_coordination
+        )
+
+    def pm_requirement_quality_multiplier(self) -> float:
+        if not self.pm_intervention_enabled:
+            return 1.0
+        return max(0.65, 1.0 - 0.30 * self.requirement_coordination)
+
+    def _reset_pm_capacity(self):
+        self.pm_interventions_remaining = self.pm_intervention_capacity
+
+    def _consume_pm_capacity(self) -> bool:
+        if self.pm_interventions_remaining <= 0:
+            return False
+        self.pm_interventions_remaining -= 1
+        return True
+
+    def should_use_pm_allocation(self) -> bool:
+        return (
+            self.pm_intervention_enabled and
+            random.random() < self.allocation_skill
+        )
+
+    def record_task_allocation(
+        self,
+        developer: DeveloperAgent,
+        task: Task,
+        pm_optimized: bool = False,
+    ):
+        match_score = developer.domain_knowledge.get(task.domain, 0.0)
+        task.assignment_domain_knowledge = match_score
+        task.pm_optimized_allocation = pm_optimized
+        task.pm_allocation_progress_multiplier = 1.0
+        self.metrics["allocation_match_score_total"] += match_score
+        self.metrics["allocation_assignment_count"] += 1
+        if match_score < task.required_domain_knowledge:
+            self.metrics["domain_mismatch_count"] += 1
+            task.assignment_domain_mismatch = True
+        else:
+            task.assignment_domain_mismatch = False
+
+        if self.pm_intervention_enabled and pm_optimized and not task.assignment_domain_mismatch:
+            match_margin = max(0.0, match_score - task.required_domain_knowledge)
+            task.pm_allocation_progress_multiplier = 1.0 + min(
+                0.16,
+                0.05 + 0.12 * self.allocation_skill + 0.05 * match_margin,
+            )
+
+    def _find_better_assignee(self, task: Task, current_developer: DeveloperAgent):
+        candidates = [
+            dev for dev in self.developers
+            if dev is not current_developer and
+            not dev.attrited and
+            dev.current_task is None and
+            dev.energy > 30 and
+            task.required_skill <= dev.skill_level + 1.0 and
+            dev.domain_knowledge.get(task.domain, 0.0) >
+            current_developer.domain_knowledge.get(task.domain, 0.0)
+        ]
+        if not candidates:
+            return None
+        return max(
+            candidates,
+            key=lambda dev: (
+                dev.domain_knowledge.get(task.domain, 0.0),
+                dev.energy,
+                dev.skill_level,
+            ),
+        )
+
+    def _try_reassign_low_progress_task(self, overloaded_devs: list[DeveloperAgent]) -> bool:
+        candidates = []
+        for dev in overloaded_devs:
+            task = dev.current_task
+            if task is None or task.task_type == "incident":
+                continue
+            assigned_step = getattr(task, "assigned_step", task.created_step)
+            assignment_age = self.current_step - assigned_step
+            slow_threshold = max(4, int(task.base_steps * 2.5))
+            if assignment_age < slow_threshold or task.progress >= 0.5:
+                continue
+            better_assignee = self._find_better_assignee(task, dev)
+            if better_assignee is not None:
+                candidates.append((dev, better_assignee, task))
+
+        if not candidates:
+            return False
+
+        current_dev, new_dev, task = max(
+            candidates,
+            key=lambda item: item[1].domain_knowledge.get(item[2].domain, 0.0),
+        )
+        current_dev.current_task = None
+        current_dev.state = "Idle"
+        current_dev.flow_streak = 0
+        new_dev.receive_task(task)
+        self.metrics["reassignments"] += 1
+        self.metrics["bottleneck_interventions"] += 1
+        return True
+
+    def _recover_overloaded_helper(self, overloaded_devs: list[DeveloperAgent]) -> bool:
+        if not overloaded_devs:
+            return False
+        dev = max(
+            overloaded_devs,
+            key=lambda item: (
+                item.mentoring_load,
+                item.help_requests_received,
+                -item.energy,
+            ),
+        )
+        dev.energy = min(100.0, dev.energy + 4.0)
+        dev.motivation = min(100.0, dev.motivation + 0.5)
+        self.metrics["bottleneck_interventions"] += 1
+        return True
+
+    def _run_pm_bottleneck_intervention(self):
+        if not self.pm_intervention_enabled:
+            return
+        if (
+            self.current_step - self.last_bottleneck_intervention_step
+            < self.pm_bottleneck_cooldown_steps
+        ):
+            return
+        if random.random() >= self.bottleneck_detection:
+            return
+
+        active_devs = [dev for dev in self.developers if not dev.attrited]
+        if not active_devs:
+            return
+
+        help_total = self.metrics["help_requests_total"]
+        help_resolved = self.metrics["help_requests_resolved"]
+        resolution_rate = help_resolved / help_total if help_total else 1.0
+        active_count = max(len(active_devs), 1)
+        backlog_pressure = len(self.backlog) / active_count
+
+        overloaded_devs = [
+            dev for dev in active_devs
+            if dev.mentoring_load >= 6.0 or dev.help_requests_received >= 4
+        ]
+        low_progress_devs = [
+            dev for dev in active_devs
+            if dev.current_task is not None and
+            self.current_step - getattr(dev.current_task, "assigned_step", dev.current_task.created_step) >=
+            max(4, int(dev.current_task.base_steps * 2.5)) and
+            dev.current_task.progress < 0.5
+        ]
+
+        bottleneck_detected = bool(
+            overloaded_devs or
+            low_progress_devs or
+            (help_total >= 5 and resolution_rate < 0.6) or
+            backlog_pressure > self.target_wip_per_dev * 1.6
+        )
+        if not bottleneck_detected:
+            return
+
+        self.metrics["bottlenecks_detected"] += 1
+
+        if (
+            self.pm_interventions_remaining > 0 and
+            self._try_reassign_low_progress_task(overloaded_devs + low_progress_devs)
+        ):
+            self._consume_pm_capacity()
+            self.last_bottleneck_intervention_step = self.current_step
+            return
+
+        if (
+            self.pm_interventions_remaining > 0 and
+            self._recover_overloaded_helper(overloaded_devs or low_progress_devs)
+        ):
+            self._consume_pm_capacity()
+            self.last_bottleneck_intervention_step = self.current_step
+            return
+
+    def _run_pm_requirement_coordination(self):
+        if not self.pm_intervention_enabled:
+            return
+
+        active_devs = [dev for dev in self.developers if not dev.attrited]
+        if not active_devs:
+            return
+
+        unclear_work = any(
+            task.status in {"backlog", "in_progress", "review_pending"}
+            for task in self.backlog + self.pending_reviews
+        )
+        if not unclear_work:
+            return
+
+        unclear_factor = 1 - self.requirement_clarity
+        clarification_prob = min(
+            1.0,
+            0.05 + 0.15 * self.requirement_coordination + 0.10 * unclear_factor,
+        )
+        if random.random() >= clarification_prob:
+            return
+        if not self._consume_pm_capacity():
+            return
+
+        self.metrics["clarification_events"] += 1
+        for dev in active_devs:
+            dev.energy = max(0.0, dev.energy - 0.1)
+
     def _sprint_start(self):
         self.current_sprint += 1
         sprint_tasks = [t for t in self.backlog if t.status == "backlog"][:self.sprint_backlog_size]
@@ -221,8 +468,9 @@ class LGCNSDevModel(Model):
             0.0,
             base_prob * (1 - self.review_defect_reduction * self.review_strictness),
         )
-        clarity_factor = 1 - self.clarity_defect_reduction * self.requirement_clarity
+        clarity_factor = 1 - self.clarity_defect_reduction * self.effective_requirement_clarity
         effective_prob = max(0.0, effective_prob * clarity_factor)
+        effective_prob = max(0.0, effective_prob * self.pm_requirement_quality_multiplier())
         if random.random() < effective_prob:
             priority_weights = {"Low": 0.4, "Medium": 0.3, "High": 0.2, "Critical": 0.1}
             priority = random.choices(
@@ -342,10 +590,14 @@ class LGCNSDevModel(Model):
             return
 
         self.current_step += 1
+        self._reset_pm_capacity()
 
         # Sprint 시작
         if (self.current_step - 1) % 10 == 0:
             self._sprint_start()
+
+        # PM 요구사항 조율
+        self._run_pm_requirement_coordination()
 
         # 환경 이벤트: incident 발생
         self._check_incident_spawn()
@@ -361,6 +613,9 @@ class LGCNSDevModel(Model):
 
         # Agent 스텝
         self.schedule.step()
+
+        # PM 병목 감지 및 완화
+        self._run_pm_bottleneck_intervention()
 
         # 배포 처리
         self._check_deployments()
