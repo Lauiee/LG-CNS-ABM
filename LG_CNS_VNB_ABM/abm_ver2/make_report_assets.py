@@ -14,6 +14,121 @@ SCENARIO_SUMMARIES = {
     "A": FINAL_DIR / "scenario_A_summary.csv",
     "B": FINAL_DIR / "scenario_B_summary.csv",
     "C": FINAL_DIR / "scenario_C_summary.csv",
+    "D": FINAL_DIR / "scenario_D_summary.csv",
+    "E": FINAL_DIR / "scenario_E_summary.csv",
+}
+
+TEAM_COMPOSITION_ORDER = ["junior_heavy", "balanced", "senior_heavy"]
+PM_PROFILE_ORDER = [
+    "weak_pm",
+    "allocation_focused_pm",
+    "bottleneck_focused_pm",
+    "requirement_focused_pm",
+    "strong_pm",
+]
+
+SCENARIO_D_REPORT_COLUMNS = [
+    "condition_id",
+    "team_composition",
+    "mentoring_intensity",
+    "PRs per Engineer mean",
+    "Lead Time (steps) mean",
+    "Change Failure Rate (%) mean",
+    "avg_energy mean",
+    "avg_knowledge mean",
+    "help_requests_total mean",
+    "help_requests_resolved mean",
+    "help_request_resolution_rate mean",
+    "mentoring_load_total mean",
+    "avg_knowledge_gain_from_help mean",
+    "helper_interruptions mean",
+    "junior_avg_knowledge mean",
+    "senior_mentoring_load mean",
+    "junior_help_requests mean",
+]
+
+SCENARIO_D_IMPACT_METRICS = [
+    "PRs per Engineer mean",
+    "help_request_resolution_rate mean",
+    "mentoring_load_total mean",
+    "avg_knowledge_gain_from_help mean",
+    "helper_interruptions mean",
+    "junior_help_requests mean",
+]
+
+SCENARIO_D_COMPARISONS = [
+    ("D1", "D2", "junior_heavy mentoring intensity increase"),
+    ("D3", "D4", "balanced mentoring intensity increase"),
+    ("D5", "D6", "senior_heavy mentoring intensity increase"),
+    ("D1", "D5", "low mentoring junior_heavy vs senior_heavy"),
+    ("D2", "D6", "high mentoring junior_heavy vs senior_heavy"),
+]
+
+SCENARIO_E_REPORT_COLUMNS = [
+    "condition_id",
+    "pm_profile",
+    "allocation_skill",
+    "bottleneck_detection",
+    "requirement_coordination",
+    "PRs per Engineer mean",
+    "Lead Time (steps) mean",
+    "Change Failure Rate (%) mean",
+    "avg_energy mean",
+    "help_requests_total mean",
+    "help_request_resolution_rate mean",
+    "mentoring_load_total mean",
+    "helper_interruptions mean",
+    "allocation_match_score mean",
+    "domain_mismatch_count mean",
+    "bottlenecks_detected mean",
+    "bottleneck_interventions mean",
+    "reassignments mean",
+    "clarification_events mean",
+    "effective_requirement_clarity mean",
+]
+
+SCENARIO_E_IMPACT_METRICS = [
+    "PRs per Engineer mean",
+    "avg_energy mean",
+    "Change Failure Rate (%) mean",
+    "allocation_match_score mean",
+    "domain_mismatch_count mean",
+    "bottleneck_interventions mean",
+    "reassignments mean",
+    "effective_requirement_clarity mean",
+    "clarification_events mean",
+]
+
+SCENARIO_E_COMPARISONS = [
+    ("E1", "E2", "weak_pm 대비 allocation_focused_pm"),
+    ("E1", "E3", "weak_pm 대비 bottleneck_focused_pm"),
+    ("E1", "E4", "weak_pm 대비 requirement_focused_pm"),
+    ("E1", "E5", "weak_pm 대비 strong_pm"),
+]
+
+SCENARIO_E_INTERPRETATIONS = {
+    ("E1", "E2"): {
+        "allocation_match_score mean": "업무 배분 역량 향상에 따라 domain match 개선",
+        "domain_mismatch_count mean": "업무 배분 역량 향상에 따라 domain mismatch 감소",
+        "PRs per Engineer mean": "업무 배분 개선이 개인 생산성에 미치는 영향",
+        "Lead Time (steps) mean": "업무 배분 개선이 리드타임에 미치는 영향",
+    },
+    ("E1", "E3"): {
+        "avg_energy mean": "병목 감지 역량 향상에 따라 평균 에너지 개선",
+        "bottleneck_interventions mean": "병목 감지 역량 향상에 따라 병목 개입 증가",
+        "reassignments mean": "병목 감지 역량 향상에 따라 재배정 증가",
+    },
+    ("E1", "E4"): {
+        "Change Failure Rate (%) mean": "요구사항 조율 역량 향상에 따라 실패율 감소",
+        "effective_requirement_clarity mean": "요구사항 조율 역량 향상에 따라 effective clarity 증가",
+        "clarification_events mean": "요구사항 조율 이벤트가 품질 개선 비용으로 발생",
+    },
+    ("E1", "E5"): {
+        "avg_energy mean": "strong PM은 weak PM 대비 에너지 지표 개선",
+        "Change Failure Rate (%) mean": "strong PM은 weak PM 대비 품질 지표 개선",
+        "domain_mismatch_count mean": "strong PM은 weak PM 대비 domain mismatch 감소",
+        "effective_requirement_clarity mean": "strong PM은 weak PM 대비 요구사항 명확도 개선",
+    },
 }
 
 
@@ -91,6 +206,41 @@ def sort_rows_numeric(rows: list[dict], key: str) -> list[dict]:
     return sorted(rows, key=lambda row: (to_float(row.get(key)) is None, to_float(row.get(key)) or 0))
 
 
+def team_composition_index(value: str) -> int:
+    try:
+        return TEAM_COMPOSITION_ORDER.index(value)
+    except ValueError:
+        return len(TEAM_COMPOSITION_ORDER)
+
+
+def sort_scenario_d_rows(rows: list[dict]) -> list[dict]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            team_composition_index(row.get("team_composition", "")),
+            to_float(row.get("mentoring_intensity")) or 0,
+            condition_sort_key(row),
+        ),
+    )
+
+
+def pm_profile_index(value: str) -> int:
+    try:
+        return PM_PROFILE_ORDER.index(value)
+    except ValueError:
+        return len(PM_PROFILE_ORDER)
+
+
+def sort_scenario_e_rows(rows: list[dict]) -> list[dict]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            pm_profile_index(row.get("pm_profile", "")),
+            condition_sort_key(row),
+        ),
+    )
+
+
 def rows_by_condition(rows: list[dict]) -> dict:
     return {row.get("condition_id"): row for row in rows}
 
@@ -100,6 +250,34 @@ def copy_formatted(row: dict, columns: list[str]) -> dict:
     for column in columns:
         if column == "condition_id":
             formatted[column] = row.get(column, "")
+        else:
+            formatted[column] = format_number(row.get(column))
+    return formatted
+
+
+def copy_scenario_d_report_row(row: dict) -> dict:
+    formatted = {}
+    for column in SCENARIO_D_REPORT_COLUMNS:
+        if column in {"condition_id", "team_composition"}:
+            formatted[column] = row.get(column, "")
+        elif column == "mentoring_intensity":
+            formatted[column] = format_label(row.get(column))
+        else:
+            formatted[column] = format_number(row.get(column))
+    return formatted
+
+
+def copy_scenario_e_report_row(row: dict) -> dict:
+    formatted = {}
+    for column in SCENARIO_E_REPORT_COLUMNS:
+        if column in {"condition_id", "pm_profile"}:
+            formatted[column] = row.get(column, "")
+        elif column in {
+            "allocation_skill",
+            "bottleneck_detection",
+            "requirement_coordination",
+        }:
+            formatted[column] = format_label(row.get(column))
         else:
             formatted[column] = format_number(row.get(column))
     return formatted
@@ -234,6 +412,22 @@ def build_scenario_c_table(rows: list[dict]) -> tuple[list[dict], list[str]]:
     return output_rows, columns + pct_columns
 
 
+def build_scenario_d_table(rows: list[dict]) -> tuple[list[dict], list[str]]:
+    output_rows = [
+        copy_scenario_d_report_row(row)
+        for row in sort_scenario_d_rows(rows)
+    ]
+    return output_rows, SCENARIO_D_REPORT_COLUMNS
+
+
+def build_scenario_e_table(rows: list[dict]) -> tuple[list[dict], list[str]]:
+    output_rows = [
+        copy_scenario_e_report_row(row)
+        for row in sort_scenario_e_rows(rows)
+    ]
+    return output_rows, SCENARIO_E_REPORT_COLUMNS
+
+
 def add_impact_row(
     rows: list[dict],
     scenario_id: str,
@@ -261,6 +455,116 @@ def add_impact_row(
             "interpretation": interpretation,
         }
     )
+
+
+def build_scenario_d_impact_summary(summary_rows: list[dict]) -> tuple[list[dict], list[str]]:
+    rows = []
+    by_condition = rows_by_condition(summary_rows)
+    for baseline_condition, target_condition, comparison_label in SCENARIO_D_COMPARISONS:
+        baseline = by_condition[baseline_condition]
+        target = by_condition[target_condition]
+        for metric in SCENARIO_D_IMPACT_METRICS:
+            baseline_value = to_float(baseline.get(metric))
+            target_value = to_float(target.get(metric))
+            rows.append(
+                {
+                    "scenario_id": "D",
+                    "comparison": f"{baseline_condition}->{target_condition}",
+                    "comparison_label": comparison_label,
+                    "key_metric": metric,
+                    "baseline_condition": baseline_condition,
+                    "target_condition": target_condition,
+                    "baseline_team_composition": baseline.get("team_composition", ""),
+                    "target_team_composition": target.get("team_composition", ""),
+                    "baseline_mentoring_intensity": format_label(baseline.get("mentoring_intensity")),
+                    "target_mentoring_intensity": format_label(target.get("mentoring_intensity")),
+                    "baseline_value": format_number(baseline_value),
+                    "target_value": format_number(target_value),
+                    "change_pct": format_number(pct_change(target_value, baseline_value)),
+                }
+            )
+    fieldnames = [
+        "scenario_id",
+        "comparison",
+        "comparison_label",
+        "key_metric",
+        "baseline_condition",
+        "target_condition",
+        "baseline_team_composition",
+        "target_team_composition",
+        "baseline_mentoring_intensity",
+        "target_mentoring_intensity",
+        "baseline_value",
+        "target_value",
+        "change_pct",
+    ]
+    return rows, fieldnames
+
+
+def scenario_e_interpretation(
+    baseline_condition: str,
+    target_condition: str,
+    metric: str,
+) -> str:
+    comparison_map = SCENARIO_E_INTERPRETATIONS.get(
+        (baseline_condition, target_condition),
+        {},
+    )
+    if metric in comparison_map:
+        return comparison_map[metric]
+
+    defaults = {
+        "PRs per Engineer mean": "PM 역량 변화가 개인 생산성에 미치는 영향",
+        "avg_energy mean": "PM 역량 변화가 개발자 에너지에 미치는 영향",
+        "Change Failure Rate (%) mean": "PM 역량 변화가 품질 지표에 미치는 영향",
+        "allocation_match_score mean": "업무 배분 적합도 변화",
+        "domain_mismatch_count mean": "domain mismatch 변화",
+        "bottleneck_interventions mean": "병목 개입 빈도 변화",
+        "reassignments mean": "병목 완화를 위한 재배정 변화",
+        "effective_requirement_clarity mean": "요구사항 명확도 변화",
+        "clarification_events mean": "요구사항 조율 이벤트 변화",
+    }
+    return defaults.get(metric, "PM 역량 변화에 따른 지표 변화")
+
+
+def build_scenario_e_impact_summary(summary_rows: list[dict]) -> tuple[list[dict], list[str]]:
+    rows = []
+    by_condition = rows_by_condition(summary_rows)
+    for baseline_condition, target_condition, comparison_label in SCENARIO_E_COMPARISONS:
+        baseline = by_condition[baseline_condition]
+        target = by_condition[target_condition]
+        for metric in SCENARIO_E_IMPACT_METRICS:
+            baseline_value = to_float(baseline.get(metric))
+            target_value = to_float(target.get(metric))
+            rows.append(
+                {
+                    "scenario": "E",
+                    "comparison": comparison_label,
+                    "metric": metric,
+                    "from_condition": baseline_condition,
+                    "to_condition": target_condition,
+                    "from_value": format_number(baseline_value),
+                    "to_value": format_number(target_value),
+                    "pct_change": format_number(pct_change(target_value, baseline_value)),
+                    "interpretation": scenario_e_interpretation(
+                        baseline_condition,
+                        target_condition,
+                        metric,
+                    ),
+                }
+            )
+    fieldnames = [
+        "scenario",
+        "comparison",
+        "metric",
+        "from_condition",
+        "to_condition",
+        "from_value",
+        "to_value",
+        "pct_change",
+        "interpretation",
+    ]
+    return rows, fieldnames
 
 
 def build_impact_summary(all_rows: dict[str, list[dict]]) -> tuple[list[dict], list[str]]:
@@ -314,6 +618,126 @@ def save_line_chart(rows, x_key, y_key, group_key, title, xlabel, ylabel, path):
     ax.set_ylabel(ylabel)
     ax.grid(True)
     ax.legend()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_team_composition_line_chart(rows, y_key, title, ylabel, path):
+    plt = get_pyplot()
+    fig, ax = plt.subplots(figsize=(8, 5))
+    x_positions = list(range(len(TEAM_COMPOSITION_ORDER)))
+    grouped = group_by(rows, "mentoring_intensity")
+    for intensity, group_rows in sorted(grouped.items(), key=lambda item: to_float(item[0]) or 0):
+        by_composition = {
+            row.get("team_composition", ""): row
+            for row in group_rows
+        }
+        ys = []
+        for composition in TEAM_COMPOSITION_ORDER:
+            value = to_float(by_composition.get(composition, {}).get(y_key))
+            ys.append(value if value is not None else math.nan)
+        ax.plot(
+            x_positions,
+            ys,
+            marker="o",
+            label=f"mentoring_intensity={format_label(intensity)}",
+        )
+    ax.set_title(title)
+    ax.set_xlabel("Team Composition")
+    ax.set_ylabel(ylabel)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(TEAM_COMPOSITION_ORDER)
+    ax.grid(True, axis="y")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def scenario_e_plot_rows(rows: list[dict]) -> list[dict]:
+    return sort_scenario_e_rows(rows)
+
+
+def scenario_e_labels(rows: list[dict]) -> list[str]:
+    return [row.get("pm_profile", "") for row in scenario_e_plot_rows(rows)]
+
+
+def save_pm_profile_bar_chart(rows, y_key, title, ylabel, path):
+    plt = get_pyplot()
+    plot_rows = scenario_e_plot_rows(rows)
+    labels = [row.get("pm_profile", "") for row in plot_rows]
+    values = [to_float(row.get(y_key)) or 0.0 for row in plot_rows]
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.bar(labels, values)
+    ax.set_title(title)
+    ax.set_xlabel("PM Profile")
+    ax.set_ylabel(ylabel)
+    ax.grid(True, axis="y")
+    ax.tick_params(axis="x", labelrotation=30)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_pm_profile_grouped_bar_chart(rows, series_specs, title, ylabel, path):
+    plt = get_pyplot()
+    plot_rows = scenario_e_plot_rows(rows)
+    labels = [row.get("pm_profile", "") for row in plot_rows]
+    x_positions = list(range(len(labels)))
+    series_count = max(len(series_specs), 1)
+    bar_width = min(0.8 / series_count, 0.35)
+    start_offset = -bar_width * (series_count - 1) / 2
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for series_index, (metric, label) in enumerate(series_specs):
+        offset = start_offset + series_index * bar_width
+        values = [to_float(row.get(metric)) or 0.0 for row in plot_rows]
+        xs = [position + offset for position in x_positions]
+        ax.bar(xs, values, width=bar_width, label=label)
+
+    ax.set_title(title)
+    ax.set_xlabel("PM Profile")
+    ax.set_ylabel(ylabel)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(labels, rotation=30, ha="right")
+    ax.grid(True, axis="y")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_pm_impact_summary_chart(rows, path):
+    plt = get_pyplot()
+    plot_rows = scenario_e_plot_rows(rows)
+    labels = [row.get("pm_profile", "") for row in plot_rows]
+    baseline = rows_by_condition(rows)["E1"]
+    metrics = [
+        ("PRs per Engineer mean", "PRs"),
+        ("avg_energy mean", "Energy"),
+        ("Change Failure Rate (%) mean", "CFR"),
+        ("domain_mismatch_count mean", "Mismatch"),
+    ]
+    x_positions = list(range(len(labels)))
+    bar_width = 0.18
+    start_offset = -bar_width * (len(metrics) - 1) / 2
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for metric_index, (metric, label) in enumerate(metrics):
+        offset = start_offset + metric_index * bar_width
+        baseline_value = to_float(baseline.get(metric))
+        values = [
+            pct_change(row.get(metric), baseline_value) or 0.0
+            for row in plot_rows
+        ]
+        xs = [position + offset for position in x_positions]
+        ax.bar(xs, values, width=bar_width, label=label)
+
+    ax.axhline(0, color="#555555", linewidth=0.8)
+    ax.set_title("Scenario E: PM Impact Summary")
+    ax.set_xlabel("PM Profile")
+    ax.set_ylabel("Percent Change vs weak_pm")
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(labels, rotation=30, ha="right")
+    ax.grid(True, axis="y")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0))
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
@@ -410,6 +834,115 @@ def save_figures(all_rows: dict[str, list[dict]], impact_rows: list[dict]) -> li
     add_line("scenario_C_backlog_vs_remaining_backlog.png", all_rows["C"], "sprint_backlog_size", "remaining_backlog mean", "team_awareness", "Scenario C: Backlog vs Remaining Backlog", "Sprint Backlog Size", "Remaining Backlog")
     add_line("scenario_C_backlog_vs_attrition.png", all_rows["C"], "sprint_backlog_size", "attrition_count mean", "team_awareness", "Scenario C: Backlog vs Attrition", "Sprint Backlog Size", "Attrition Count")
 
+    if "D" in all_rows:
+        scenario_d_figures = [
+            (
+                "scenario_D_team_composition_vs_prs.png",
+                "PRs per Engineer mean",
+                "Scenario D: Team Composition vs PRs per Engineer",
+                "PRs per Engineer",
+            ),
+            (
+                "scenario_D_mentoring_vs_resolution_rate.png",
+                "help_request_resolution_rate mean",
+                "Scenario D: Mentoring Intensity vs Help Resolution Rate",
+                "Help Resolution Rate",
+            ),
+            (
+                "scenario_D_mentoring_vs_knowledge_gain.png",
+                "avg_knowledge_gain_from_help mean",
+                "Scenario D: Mentoring Intensity vs Knowledge Gain",
+                "Average Knowledge Gain from Help",
+            ),
+            (
+                "scenario_D_mentoring_vs_helper_interruptions.png",
+                "helper_interruptions mean",
+                "Scenario D: Mentoring Intensity vs Helper Interruptions",
+                "Helper Interruptions",
+            ),
+            (
+                "scenario_D_mentoring_load_tradeoff.png",
+                "mentoring_load_total mean",
+                "Scenario D: Mentoring Load Trade-off",
+                "Mentoring Load Total",
+            ),
+        ]
+        for filename, y_key, title, ylabel in scenario_d_figures:
+            path = FIGURE_DIR / filename
+            save_team_composition_line_chart(
+                all_rows["D"],
+                y_key,
+                title,
+                ylabel,
+                path,
+            )
+            figure_paths.append(path)
+
+    if "E" in all_rows:
+        scenario_e_rows = all_rows["E"]
+        scenario_e_figures = [
+            (
+                "scenario_E_pm_profile_vs_prs.png",
+                "PRs per Engineer mean",
+                "Scenario E: PM Profile vs PRs per Engineer",
+                "PRs per Engineer",
+            ),
+            (
+                "scenario_E_pm_profile_vs_energy.png",
+                "avg_energy mean",
+                "Scenario E: PM Profile vs Avg Energy",
+                "Avg Energy",
+            ),
+        ]
+        for filename, y_key, title, ylabel in scenario_e_figures:
+            path = FIGURE_DIR / filename
+            save_pm_profile_bar_chart(scenario_e_rows, y_key, title, ylabel, path)
+            figure_paths.append(path)
+
+        grouped_e_figures = [
+            (
+                "scenario_E_allocation_match_vs_mismatch.png",
+                [
+                    ("allocation_match_score mean", "Allocation Match Score"),
+                    ("domain_mismatch_count mean", "Domain Mismatch Count"),
+                ],
+                "Scenario E: Allocation Match and Domain Mismatch",
+                "Value",
+            ),
+            (
+                "scenario_E_requirement_coordination_vs_cfr.png",
+                [
+                    ("effective_requirement_clarity mean", "Effective Requirement Clarity"),
+                    ("Change Failure Rate (%) mean", "Change Failure Rate (%)"),
+                ],
+                "Scenario E: Requirement Coordination and CFR",
+                "Value",
+            ),
+            (
+                "scenario_E_bottleneck_interventions.png",
+                [
+                    ("bottleneck_interventions mean", "Bottleneck Interventions"),
+                    ("reassignments mean", "Reassignments"),
+                ],
+                "Scenario E: Bottleneck Interventions and Reassignments",
+                "Count",
+            ),
+        ]
+        for filename, series_specs, title, ylabel in grouped_e_figures:
+            path = FIGURE_DIR / filename
+            save_pm_profile_grouped_bar_chart(
+                scenario_e_rows,
+                series_specs,
+                title,
+                ylabel,
+                path,
+            )
+            figure_paths.append(path)
+
+        path = FIGURE_DIR / "scenario_E_pm_impact_summary.png"
+        save_pm_impact_summary_chart(scenario_e_rows, path)
+        figure_paths.append(path)
+
     sensitivity_labels = [
         "A2->A4 PRs",
         "A2->A4 energy",
@@ -440,8 +973,18 @@ def save_figures(all_rows: dict[str, list[dict]], impact_rows: list[dict]) -> li
     return figure_paths
 
 
+def read_available_summaries() -> dict[str, list[dict]]:
+    all_rows = {}
+    for scenario_id, path in SCENARIO_SUMMARIES.items():
+        if scenario_id in {"D", "E"} and not path.exists():
+            print(f"Scenario {scenario_id} summary not found, skipping {scenario_id} report assets: {path}")
+            continue
+        all_rows[scenario_id] = read_csv(path)
+    return all_rows
+
+
 def main() -> None:
-    all_rows = {scenario_id: read_csv(path) for scenario_id, path in SCENARIO_SUMMARIES.items()}
+    all_rows = read_available_summaries()
     TABLE_DIR.mkdir(parents=True, exist_ok=True)
 
     scenario_a_rows, scenario_a_fields = build_scenario_a_table(all_rows["A"])
@@ -455,6 +998,25 @@ def main() -> None:
         (TABLE_DIR / "scenario_C_report_table.csv", scenario_c_rows, scenario_c_fields),
         (TABLE_DIR / "scenario_impact_summary.csv", impact_rows, impact_fields),
     ]
+    if "D" in all_rows:
+        scenario_d_rows, scenario_d_fields = build_scenario_d_table(all_rows["D"])
+        scenario_d_impact_rows, scenario_d_impact_fields = build_scenario_d_impact_summary(all_rows["D"])
+        tables.extend(
+            [
+                (TABLE_DIR / "scenario_D_report_table.csv", scenario_d_rows, scenario_d_fields),
+                (TABLE_DIR / "scenario_D_impact_summary.csv", scenario_d_impact_rows, scenario_d_impact_fields),
+            ]
+        )
+    if "E" in all_rows:
+        scenario_e_rows, scenario_e_fields = build_scenario_e_table(all_rows["E"])
+        scenario_e_impact_rows, scenario_e_impact_fields = build_scenario_e_impact_summary(all_rows["E"])
+        tables.extend(
+            [
+                (TABLE_DIR / "scenario_E_report_table.csv", scenario_e_rows, scenario_e_fields),
+                (TABLE_DIR / "scenario_E_impact_summary.csv", scenario_e_impact_rows, scenario_e_impact_fields),
+            ]
+        )
+
     for path, rows, fields in tables:
         write_csv(path, rows, fields)
         print(f"Wrote {len(rows)} rows to {path}")
