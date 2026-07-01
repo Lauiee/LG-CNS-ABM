@@ -58,6 +58,10 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
 def _init_domain_knowledge(skill_level: float) -> dict:
     base = min(1.0, 0.25 + 0.25 * skill_level)
     values = {
@@ -105,6 +109,8 @@ def _role_from_skill(skill_level: float) -> str:
 class DeveloperAgent(Agent):
     def __init__(self, model, skill_level: float = 1.5, sampler=None, role: str = None):
         _init_mesa_agent(self, model)
+        explicit_role = role in ROLES
+        initial_role = role if explicit_role else _role_from_skill(skill_level)
         if sampler is None:
             # 정적 속성
             self.skill_level = skill_level
@@ -127,14 +133,26 @@ class DeveloperAgent(Agent):
             self.knowledge = min(100.0, skill_level * 20)
             self.flow_streak = 0
             self.accumulated_tech_debt = 0.0
+            self.project_experience = _clamp01(0.45 + self.skill_level * 0.08 + random.uniform(-0.10, 0.10))
+            self.client_domain_experience = _clamp01(0.42 + self.skill_level * 0.07 + random.uniform(-0.12, 0.12))
+            self.prior_collaboration_score = _clamp01(0.55 + random.uniform(-0.15, 0.15))
+            self.review_capacity = _clamp(0.35 + self.skill_level * 0.25 + random.uniform(-0.10, 0.10), 0.2, 1.5)
+            self.mentoring_capacity = _clamp(0.15 + self.skill_level * 0.35 + random.uniform(-0.10, 0.10), 0.15, 1.5)
         else:
-            context = {"base_skill_level": skill_level, "skill_level": skill_level}
+            context = {
+                "base_skill_level": skill_level,
+                "skill_level": skill_level,
+                "role": initial_role,
+                "team_composition": getattr(model, "team_composition", None),
+                "project_type": getattr(model, "project_type", None),
+            }
             self.skill_level = sampler.sample(
                 "developer.skill_level",
                 default=skill_level,
                 context=context,
             )
             context["skill_level"] = self.skill_level
+            context["role"] = role if explicit_role else _role_from_skill(self.skill_level)
 
             # 정적 속성
             self.learning_rate = sampler.sample(
@@ -184,8 +202,32 @@ class DeveloperAgent(Agent):
                 default=0.0,
                 context=context,
             )
+            self.project_experience = sampler.sample(
+                "developer.project_experience",
+                default=0.55,
+                context=context,
+            )
+            self.client_domain_experience = sampler.sample(
+                "developer.client_domain_experience",
+                default=0.55,
+                context=context,
+            )
+            self.prior_collaboration_score = sampler.sample(
+                "developer.prior_collaboration_score",
+                default=0.58,
+                context=context,
+            )
+            self.review_capacity = sampler.sample(
+                "developer.review_capacity",
+                default=0.85,
+                context=context,
+            )
+            self.mentoring_capacity = sampler.sample(
+                "developer.mentoring_capacity",
+                default=0.75,
+                context=context,
+            )
 
-        explicit_role = role in ROLES
         self.role = role if explicit_role else _role_from_skill(self.skill_level)
         self.domain_knowledge = _init_domain_knowledge(self.skill_level)
         self.help_seeking_tendency = _init_help_seeking_tendency(self.skill_level)
@@ -195,6 +237,7 @@ class DeveloperAgent(Agent):
         )
         if explicit_role:
             self._apply_role_profile()
+        self._apply_experience_profile()
 
         # 행동 상태
         self.state = "Idle"
@@ -233,10 +276,55 @@ class DeveloperAgent(Agent):
 
     @property
     def effective_mentoring_tendency(self) -> float:
+        capacity_factor = 0.75 + 0.25 * min(self.effective_mentoring_capacity, 1.5)
+        tendency = self.mentoring_tendency * capacity_factor
         intensity = getattr(self.model, "mentoring_intensity", None)
         if intensity is None:
-            return self.mentoring_tendency
-        return _clamp01(self.mentoring_tendency * intensity)
+            return _clamp01(tendency)
+        return _clamp01(tendency * intensity)
+
+    @property
+    def effective_review_capacity(self) -> float:
+        return _clamp(self.review_capacity, 0.2, 1.5)
+
+    @property
+    def effective_mentoring_capacity(self) -> float:
+        return _clamp(self.mentoring_capacity, 0.15, 1.5)
+
+    def _collaboration_score_with(self, other: "DeveloperAgent") -> float:
+        return _clamp01(
+            (self.prior_collaboration_score + other.prior_collaboration_score) / 2
+        )
+
+    def _communication_cost_multiplier(self, other: "DeveloperAgent") -> float:
+        collaboration = self._collaboration_score_with(other)
+        overhead = getattr(self.model, "communication_overhead", 0.3)
+        return max(0.75, 1.0 + overhead * (1.2 - collaboration) + 0.6 * (1 - collaboration))
+
+    def _help_success_probability(self, helper: "DeveloperAgent") -> float:
+        collaboration = self._collaboration_score_with(helper)
+        experience = (
+            self.project_experience +
+            helper.project_experience +
+            self.client_domain_experience +
+            helper.client_domain_experience
+        ) / 4
+        capacity = min(helper.effective_mentoring_capacity, 1.5) / 1.5
+        overhead = getattr(self.model, "communication_overhead", 0.3)
+        return _clamp(
+            0.45 + 0.35 * collaboration + 0.15 * capacity + 0.10 * experience - 0.10 * overhead,
+            0.15,
+            0.98,
+        )
+
+    def _help_requester_energy_cost(self, helper: "DeveloperAgent", success: bool) -> float:
+        base_cost = 0.6 if success else 1.2
+        return base_cost * self._communication_cost_multiplier(helper)
+
+    def _helper_energy_cost(self, helper: "DeveloperAgent") -> float:
+        capacity = max(0.4, helper.effective_mentoring_capacity)
+        cost = HELPER_ENERGY_COST * self._communication_cost_multiplier(helper) / capacity
+        return _clamp(cost, 0.4, 6.0)
 
     def is_available(self) -> bool:
         return (not self.attrited and
@@ -269,6 +357,19 @@ class DeveloperAgent(Agent):
             }
             self.help_seeking_tendency = _clamp01(self.help_seeking_tendency - 0.15)
             self.mentoring_tendency = _clamp01(self.mentoring_tendency + 0.20)
+
+    def _apply_experience_profile(self):
+        domain_boost = (
+            (self.client_domain_experience - 0.5) * 0.16 +
+            (self.project_experience - 0.5) * 0.06
+        )
+        self.domain_knowledge = {
+            domain: _clamp01(value + domain_boost)
+            for domain, value in self.domain_knowledge.items()
+        }
+        self.quality_tendency = _clamp01(
+            self.quality_tendency + (self.project_experience - 0.5) * 0.08
+        )
 
     def step(self):
         if self.attrited:
@@ -364,11 +465,16 @@ class DeveloperAgent(Agent):
             return
         review_cost_multiplier = max(
             0.1,
-            1 + self.model.review_cost_slope * self.model.review_strictness,
+            (1 + self.model.review_cost_slope * self.model.review_strictness) *
+            getattr(self.model, "quality_gate_cost_multiplier", 1.0),
         )
-        self.energy = max(0, self.energy - 5 * review_cost_multiplier)
+        review_capacity = self.effective_review_capacity
+        self.energy = max(
+            0,
+            self.energy - 5 * review_cost_multiplier / max(0.6, review_capacity),
+        )
         self.current_task.review_progress = getattr(self.current_task, "review_progress", 0.0)
-        self.current_task.review_progress += 0.5 / review_cost_multiplier
+        self.current_task.review_progress += 0.5 * review_capacity / review_cost_multiplier
         if self.current_task.review_progress >= 1.0:
             self._complete_review()
 
@@ -384,7 +490,9 @@ class DeveloperAgent(Agent):
             recovery_time = max(1, task.completed_step - task.created_step)
             self.model.metrics["recovery_times"].append(recovery_time)
             self.model.completed_tasks.append(task)
+            return
 
+        self.model.metrics["reviewed_tasks"] += 1
         # Review strictness lowers escaped defect risk, but makes review slower/costlier.
         defect_chance = max(
             0.0,
@@ -403,25 +511,186 @@ class DeveloperAgent(Agent):
             0.0,
             defect_chance * self.model.pm_requirement_quality_multiplier(),
         )
+        defect_chance = max(
+            0.0,
+            defect_chance * getattr(self.model, "incident_probability_multiplier", 1.0),
+        )
+        defect_chance = max(
+            0.0,
+            defect_chance * getattr(self.model, "quality_gate_defect_multiplier", 1.0),
+        )
         help_received_count = getattr(task, "help_received_count", 0)
         if help_received_count:
             defect_chance *= max(0.7, 1 - 0.05 * help_received_count)
-        if random.random() < defect_chance:
-            incident = create_incident_task(self.model.current_step, caused_by=task.task_id)
-            self.model.backlog.append(incident)
-            self.model.metrics["failed_deployments"] += 1
-        else:
-            # 배포 태스크 생성
-            from tasks import Task as T
-            deploy = T(
-                task_type="deploying",
-                complexity=task.complexity,
-                domain=task.domain,
-                status="backlog",
-                created_step=task.created_step,
-                is_new_capability=task.is_new_capability,
+        defect_found = random.random() < defect_chance
+        rework_probability = self._calculate_rework_probability(task, clarity)
+        rework_triggered = random.random() < rework_probability
+        if rework_triggered:
+            self._create_rework_loop(
+                task,
+                clarity,
+                defect_found=defect_found,
+                rework_probability=rework_probability,
             )
-            self.model.backlog.append(deploy)
+            return
+
+        if defect_found:
+            self._create_incident_from_review_defect(task)
+            return
+
+        # 배포 태스크 생성
+        from tasks import Task as T
+        deploy = T(
+            task_type="deploying",
+            complexity=task.complexity,
+            domain=task.domain,
+            status="backlog",
+            created_step=task.created_step,
+            is_new_capability=task.is_new_capability,
+            rework_count=task.rework_count,
+            rework_reason=task.rework_reason,
+            origin_task_id=task.origin_task_id or task.task_id,
+        )
+        self.model.backlog.append(deploy)
+
+    def _task_owner(self, task: Task):
+        return next(
+            (
+                dev for dev in self.model.developers
+                if dev.unique_id == getattr(task, "assigned_to", None)
+            ),
+            None,
+        )
+
+    def _task_client_domain_experience(self, task: Task) -> float:
+        owner = self._task_owner(task)
+        owner_experience = getattr(owner, "client_domain_experience", None)
+        reviewer_experience = getattr(self, "client_domain_experience", 0.5)
+        if owner_experience is None:
+            return reviewer_experience
+        return min(owner_experience, reviewer_experience)
+
+    def _calculate_rework_probability(self, task: Task, clarity: float) -> float:
+        complexity_risk = {
+            "C1": 0.02,
+            "C2": 0.04,
+            "C3": 0.07,
+            "C4": 0.11,
+            "C5": 0.16,
+        }.get(task.complexity, 0.06)
+        ambiguity_risk = 0.18 * max(0.0, 1 - clarity)
+        domain_mismatch_risk = (
+            0.12 if getattr(task, "assignment_domain_mismatch", False) else 0.0
+        )
+        client_domain_gap = max(0.0, 0.65 - self._task_client_domain_experience(task))
+        client_domain_risk = 0.16 * client_domain_gap / 0.65
+        volatility_risk = 0.18 * getattr(self.model, "requirement_volatility", 0.0)
+        help_reduction = min(0.08, 0.02 * getattr(task, "help_received_count", 0))
+        return _clamp(
+            complexity_risk +
+            ambiguity_risk +
+            domain_mismatch_risk +
+            client_domain_risk -
+            help_reduction +
+            volatility_risk,
+            0.0,
+            0.75,
+        )
+
+    def _select_rework_reason(self, task: Task, clarity: float, defect_found: bool) -> str:
+        complexity_weight = {
+            "C1": 0.05,
+            "C2": 0.10,
+            "C3": 0.18,
+            "C4": 0.28,
+            "C5": 0.38,
+        }.get(task.complexity, 0.12)
+        ambiguity_weight = max(0.05, 1 - clarity)
+        review_weight = max(0.05, 1 - self.model.review_strictness)
+        if defect_found:
+            review_weight += 0.25
+        test_weight = 0.20 + (0.20 if task.task_type == "testing" else 0.0)
+        domain_weight = 0.35 if getattr(task, "assignment_domain_mismatch", False) else 0.05
+        client_gap_weight = max(0.05, 1 - self._task_client_domain_experience(task))
+        volatility_weight = max(0.05, getattr(self.model, "requirement_volatility", 0.0))
+        reasons = [
+            "requirement_ambiguity",
+            "review_failure",
+            "test_failure",
+            "domain_mismatch",
+            "client_domain_gap",
+            "complexity",
+            "requirement_volatility",
+        ]
+        weights = [
+            ambiguity_weight,
+            review_weight,
+            test_weight,
+            domain_weight,
+            client_gap_weight,
+            complexity_weight,
+            volatility_weight,
+        ]
+        return random.choices(reasons, weights=weights, k=1)[0]
+
+    def _create_rework_loop(
+        self,
+        task: Task,
+        clarity: float,
+        defect_found: bool,
+        rework_probability: float,
+    ):
+        reason = self._select_rework_reason(task, clarity, defect_found)
+        rollback_range = {
+            "requirement_ambiguity": (0.45, 0.70),
+            "review_failure": (0.35, 0.60),
+            "test_failure": (0.25, 0.45),
+            "domain_mismatch": (0.30, 0.55),
+            "client_domain_gap": (0.25, 0.50),
+            "complexity": (0.20, 0.45),
+            "requirement_volatility": (0.30, 0.60),
+        }[reason]
+        previous_progress = task.progress
+        task.rework_count += 1
+        task.rework_reason = reason
+        task.origin_task_id = task.origin_task_id or task.task_id
+        task.status = "backlog"
+        task.assigned_to = None
+        task.progress = _clamp(
+            previous_progress - random.uniform(*rollback_range),
+            0.05,
+            0.95,
+        )
+        task.review_progress = 0.0
+        self.model.backlog.append(task)
+        self.model.metrics["rework_count"] += 1
+        rework_by_reason = self.model.metrics.setdefault("rework_by_reason", {})
+        rework_by_reason[reason] = rework_by_reason.get(reason, 0) + 1
+
+        self.model.log_interaction(
+            "rework_created",
+            source_id=self.unique_id,
+            task_id=task.task_id,
+            domain=task.domain,
+            metadata={
+                "rework_reason": reason,
+                "rework_count": task.rework_count,
+                "origin_task_id": task.origin_task_id,
+                "defect_found": defect_found,
+                "rework_probability": round(rework_probability, 3),
+                "previous_progress": round(previous_progress, 3),
+                "new_progress": round(task.progress, 3),
+            },
+        )
+
+    def _create_incident_from_review_defect(self, task: Task):
+        incident = create_incident_task(
+            self.model.current_step,
+            caused_by=task.task_id,
+            domain_distribution=getattr(self.model, "domain_distribution", None),
+        )
+        self.model.backlog.append(incident)
+        self.model.metrics["failed_deployments"] += 1
 
     def _maybe_request_help(self, task: Task):
         current_knowledge = self.domain_knowledge.get(task.domain, 0.0)
@@ -442,10 +711,75 @@ class DeveloperAgent(Agent):
         self.model.metrics["help_requests_total"] += 1
 
         helper = self._select_helper(task.domain, current_knowledge)
+        self.model.log_interaction(
+            "help_request",
+            source_id=self.unique_id,
+            target_id=getattr(helper, "unique_id", None),
+            task_id=task.task_id,
+            domain=task.domain,
+            metadata={
+                "knowledge_gap": round(knowledge_gap, 3),
+            },
+        )
         if helper is None:
+            self.model.log_interaction(
+                "help_failed",
+                source_id=self.unique_id,
+                task_id=task.task_id,
+                domain=task.domain,
+                metadata={
+                    "reason": "no_available_helper",
+                    "knowledge_gap": round(knowledge_gap, 3),
+                },
+            )
             return
         intensity = getattr(self.model, "mentoring_intensity", None)
         if intensity is not None and random.random() >= helper.effective_mentoring_tendency:
+            self.model.log_interaction(
+                "help_failed",
+                source_id=self.unique_id,
+                target_id=helper.unique_id,
+                task_id=task.task_id,
+                domain=task.domain,
+                metadata={
+                    "reason": "helper_not_available_for_mentoring",
+                    "mentoring_tendency": round(helper.effective_mentoring_tendency, 3),
+                },
+            )
+            return
+        if random.random() >= self._help_success_probability(helper):
+            cost = self._help_requester_energy_cost(helper, success=False)
+            helper_load = cost * 0.35
+            self.energy = max(0, self.energy - cost)
+            helper.energy = max(0, helper.energy - helper_load)
+            helper.mentoring_load += helper_load
+            helper.help_requests_received += 1
+            self.model.metrics["mentoring_load_total"] += helper_load
+            if helper.current_task is not None:
+                self.model.metrics["helper_interruptions"] += 1
+            self.model.log_interaction(
+                "help_failed",
+                source_id=self.unique_id,
+                target_id=helper.unique_id,
+                task_id=task.task_id,
+                domain=task.domain,
+                metadata={
+                    "reason": "low_help_success_probability",
+                    "helper_load": round(helper_load, 3),
+                    "requester_cost": round(cost, 3),
+                },
+            )
+            self.model.log_interaction(
+                "mentoring",
+                source_id=helper.unique_id,
+                target_id=self.unique_id,
+                task_id=task.task_id,
+                domain=task.domain,
+                metadata={
+                    "outcome": "failed",
+                    "helper_load": round(helper_load, 3),
+                },
+            )
             return
 
         self._apply_help_success(task, helper)
@@ -465,7 +799,9 @@ class DeveloperAgent(Agent):
                 candidates,
                 key=lambda dev: (
                     dev.effective_mentoring_tendency,
-                    dev.domain_knowledge.get(domain, 0.0) - dev.mentoring_load * load_weight,
+                    dev.effective_mentoring_capacity,
+                    dev.domain_knowledge.get(domain, 0.0) -
+                    dev.mentoring_load * load_weight / max(dev.effective_mentoring_capacity, 0.4),
                     dev.energy,
                 ),
             )
@@ -473,12 +809,16 @@ class DeveloperAgent(Agent):
             candidates,
             key=lambda dev: (
                 dev.effective_mentoring_tendency,
+                dev.effective_mentoring_capacity,
                 dev.domain_knowledge.get(domain, 0.0),
                 dev.energy,
             ),
         )
 
     def _apply_help_success(self, task: Task, helper: "DeveloperAgent"):
+        requester_cost = self._help_requester_energy_cost(helper, success=True)
+        helper_cost = self._helper_energy_cost(helper)
+
         task.progress += HELP_PROGRESS_BOOST
         task.help_received_count = getattr(task, "help_received_count", 0) + 1
 
@@ -488,15 +828,39 @@ class DeveloperAgent(Agent):
         self.domain_knowledge[task.domain] = new_knowledge
         self.knowledge_gained_from_help += HELP_KNOWLEDGE_GAIN
         self.motivation = min(100, self.motivation + HELP_MOTIVATION_GAIN)
+        self.energy = max(0, self.energy - requester_cost)
         self.help_requests_resolved += 1
 
-        helper.energy = max(0, helper.energy - HELPER_ENERGY_COST)
-        helper.mentoring_load += HELPER_ENERGY_COST
+        helper.energy = max(0, helper.energy - helper_cost)
+        helper.mentoring_load += helper_cost
         helper.help_requests_received += 1
 
         self.model.metrics["help_requests_resolved"] += 1
         self.model.metrics["knowledge_gained_from_help_total"] += HELP_KNOWLEDGE_GAIN
-        self.model.metrics["mentoring_load_total"] += HELPER_ENERGY_COST
+        self.model.metrics["mentoring_load_total"] += helper_cost
+        self.model.log_interaction(
+            "help_success",
+            source_id=self.unique_id,
+            target_id=helper.unique_id,
+            task_id=task.task_id,
+            domain=task.domain,
+            metadata={
+                "helper_cost": round(helper_cost, 3),
+                "requester_cost": round(requester_cost, 3),
+            },
+        )
+        self.model.log_interaction(
+            "mentoring",
+            source_id=helper.unique_id,
+            target_id=self.unique_id,
+            task_id=task.task_id,
+            domain=task.domain,
+            metadata={
+                "outcome": "success",
+                "helper_cost": round(helper_cost, 3),
+                "knowledge_gain": HELP_KNOWLEDGE_GAIN,
+            },
+        )
 
         if helper.current_task is not None:
             self.model.metrics["helper_interruptions"] += 1
@@ -571,6 +935,7 @@ class PLAgent(Agent):
         self.allocation_skill = getattr(model, "allocation_skill", 0.5)
         self.bottleneck_detection = getattr(model, "bottleneck_detection", 0.5)
         self.requirement_coordination = getattr(model, "requirement_coordination", 0.5)
+        self.scope_control = getattr(model, "scope_control", 0.5)
         self.pm_intervention_capacity = getattr(model, "pm_intervention_capacity", 2)
 
     @property
@@ -633,14 +998,44 @@ class PLAgent(Agent):
                     if not dev.attrited:
                         dev.energy = max(0, dev.energy - 15)
                         dev.receive_interrupt(energy_cost=cost)
+                        self.model.log_interaction(
+                            "incident_interrupt",
+                            source_id=self.unique_id,
+                            target_id=dev.unique_id,
+                            task_id=inc.task_id,
+                            domain=inc.domain,
+                            metadata={
+                                "priority": inc.priority,
+                            },
+                        )
                 assignee = random.choice(available)
             elif inc.priority == "High":
                 assignee = random.choice(available)
                 assignee.receive_interrupt(energy_cost=cost)
+                self.model.log_interaction(
+                    "incident_interrupt",
+                    source_id=self.unique_id,
+                    target_id=assignee.unique_id,
+                    task_id=inc.task_id,
+                    domain=inc.domain,
+                    metadata={
+                        "priority": inc.priority,
+                    },
+                )
             else:
                 assignee = min(available, key=lambda d: d.energy)
                 assignee.energy = max(0, assignee.energy - cost)
             assignee.receive_task(inc)
+            self.model.log_interaction(
+                "incident_assignment",
+                source_id=self.unique_id,
+                target_id=assignee.unique_id,
+                task_id=inc.task_id,
+                domain=inc.domain,
+                metadata={
+                    "priority": inc.priority,
+                },
+            )
             self.model.backlog.remove(inc)
 
     def _candidate_tasks_for_dev(self, dev, backlog_tasks: list[Task]) -> list[Task]:
@@ -699,6 +1094,18 @@ class PLAgent(Agent):
     def _assign_task_to_dev(self, dev, task, backlog_tasks: list[Task], pm_optimized: bool = False):
         dev.receive_task(task)
         self.model.record_task_allocation(dev, task, pm_optimized=pm_optimized)
+        self.model.log_interaction(
+            "task_assignment",
+            source_id=self.unique_id,
+            target_id=dev.unique_id,
+            task_id=task.task_id,
+            domain=task.domain,
+            metadata={
+                "task_type": task.task_type,
+                "complexity": task.complexity,
+                "pm_optimized": pm_optimized,
+            },
+        )
         if task in backlog_tasks:
             backlog_tasks.remove(task)
         if task in self.model.backlog:
@@ -736,11 +1143,29 @@ class PLAgent(Agent):
                       if not d.attrited and d.energy > 30 and d.current_task is None]
         if not candidates:
             return
-        reviewer = max(candidates, key=lambda d: d.skill_level)
+        reviewer = max(
+            candidates,
+            key=lambda d: (
+                d.effective_review_capacity,
+                d.domain_knowledge.get(task.domain, 0.0),
+                d.skill_level,
+                d.energy,
+            ),
+        )
         reviewer.current_task = task
         reviewer.state = "Reviewing"
         task.review_progress = 0.0
         task.status = "in_progress"
+        self.model.log_interaction(
+            "review_assignment",
+            source_id=self.unique_id,
+            target_id=reviewer.unique_id,
+            task_id=task.task_id,
+            domain=task.domain,
+            metadata={
+                "review_capacity": round(reviewer.effective_review_capacity, 3),
+            },
+        )
 
     def _update_team_stress(self):
         active = [d for d in self.team_members if not d.attrited]

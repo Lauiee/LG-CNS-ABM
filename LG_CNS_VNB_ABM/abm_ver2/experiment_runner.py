@@ -4,6 +4,7 @@ import csv
 import statistics
 from pathlib import Path
 
+from model import PM_PROFILES
 from simulate import run_simulation
 
 
@@ -15,6 +16,21 @@ METRIC_COLUMNS = [
     "Recovery Time (steps)",
     "% Time on New Capabilities",
 ]
+
+PROJECT_TYPES = [
+    "new_build",
+    "maintenance_enhancement",
+    "legacy_migration",
+    "deadline_driven",
+    "quality_critical",
+]
+
+TEAM_COMPOSITIONS = ["junior_heavy", "balanced", "senior_heavy"]
+SCENARIO_H_PROJECT_TYPES = ["new_build", "legacy_migration", "deadline_driven"]
+SCENARIO_H_MENTORING_INTENSITIES = [0.2, 0.5, 0.8]
+SCENARIO_I_PROJECT_TYPES = ["new_build", "deadline_driven", "quality_critical"]
+SCENARIO_I_REQUIREMENT_VOLATILITY = [0.2, 0.5, 0.8]
+SCENARIO_I_PM_PROFILES = ["weak_pm", "requirement_focused_pm", "strong_pm"]
 
 INTERNAL_METRIC_COLUMNS = [
     "avg_energy",
@@ -30,11 +46,34 @@ INTERNAL_METRIC_COLUMNS = [
     "mentoring_load_total",
     "avg_knowledge_gain_from_help",
     "helper_interruptions",
+    "staffing_cost",
+    "completed_tasks_per_cost",
+    "PRs_per_cost",
+    "interaction_event_count",
+    "interaction_load",
+    "help_request_count",
+    "help_success_count",
+    "help_resolution_rate",
+    "help_network_density",
+    "senior_bottleneck_index",
+    "review_assignment_count",
+    "review_concentration_index",
+    "senior_review_load_per_senior",
+    "senior_interaction_load_per_senior",
+    "senior_overload_risk",
+    "incident_interrupt_count",
+    "incident_interruptions",
+    "pm_intervention_count",
+    "pm_leverage_index",
+    "rework_count",
+    "rework_rate",
+    "avg_rework_per_completed_task",
     "junior_count",
     "middle_count",
     "senior_count",
     "junior_avg_knowledge",
     "senior_mentoring_load",
+    "senior_mentoring_load_per_senior",
     "junior_help_requests",
     "allocation_match_score",
     "domain_mismatch_count",
@@ -42,6 +81,9 @@ INTERNAL_METRIC_COLUMNS = [
     "bottleneck_interventions",
     "reassignments",
     "clarification_events",
+    "scope_changes",
+    "scope_changes_prevented",
+    "pm_capacity_used",
     "effective_requirement_clarity",
     "attrition_count",
     "coaching_count",
@@ -52,11 +94,13 @@ INTERNAL_METRIC_COLUMNS = [
 ]
 
 PARAM_COLUMNS = [
+    "project_type",
     "meeting_load",
     "requirement_clarity",
     "review_strictness",
     "codebase_stability",
     "sprint_backlog_size",
+    "requirement_volatility",
     "team_awareness",
     "team_composition",
     "mentoring_intensity",
@@ -64,6 +108,7 @@ PARAM_COLUMNS = [
     "allocation_skill",
     "bottleneck_detection",
     "requirement_coordination",
+    "scope_control",
 ]
 
 RESULT_COLUMNS = [
@@ -176,7 +221,7 @@ def scenario_c_conditions():
 def scenario_d_conditions():
     conditions = []
     condition_index = 1
-    for team_composition in ["junior_heavy", "balanced", "senior_heavy"]:
+    for team_composition in TEAM_COMPOSITIONS:
         for mentoring_intensity in [0.3, 0.8]:
             conditions.append({
                 "scenario_id": "D",
@@ -189,29 +234,87 @@ def scenario_d_conditions():
 
 
 def scenario_e_conditions():
-    profiles = [
-        ("weak_pm", 0.3, 0.3, 0.3),
-        ("allocation_focused_pm", 0.8, 0.3, 0.3),
-        ("bottleneck_focused_pm", 0.3, 0.8, 0.3),
-        ("requirement_focused_pm", 0.3, 0.3, 0.8),
-        ("strong_pm", 0.8, 0.8, 0.8),
-    ]
     conditions = []
-    for condition_index, (
-        pm_profile,
-        allocation_skill,
-        bottleneck_detection,
-        requirement_coordination,
-    ) in enumerate(profiles, start=1):
+    for condition_index, pm_profile in enumerate(PM_PROFILES, start=1):
         conditions.append({
             "scenario_id": "E",
             "condition_id": f"E{condition_index}",
             "pm_profile": pm_profile,
-            "allocation_skill": allocation_skill,
-            "bottleneck_detection": bottleneck_detection,
-            "requirement_coordination": requirement_coordination,
         })
     return conditions
+
+
+def scenario_f_conditions():
+    conditions = []
+    condition_index = 1
+    for project_type in PROJECT_TYPES:
+        for team_composition in TEAM_COMPOSITIONS:
+            conditions.append({
+                "scenario_id": "F",
+                "condition_id": f"F{condition_index}",
+                "project_type": project_type,
+                "team_composition": team_composition,
+            })
+            condition_index += 1
+    return conditions
+
+
+def scenario_g_conditions():
+    conditions = []
+    condition_index = 1
+    for project_type in PROJECT_TYPES:
+        for pm_profile in PM_PROFILES:
+            conditions.append({
+                "scenario_id": "G",
+                "condition_id": f"G{condition_index}",
+                "project_type": project_type,
+                "pm_profile": pm_profile,
+            })
+            condition_index += 1
+    return conditions
+
+
+def scenario_h_conditions():
+    conditions = []
+    condition_index = 1
+    for project_type in SCENARIO_H_PROJECT_TYPES:
+        for team_composition in TEAM_COMPOSITIONS:
+            for mentoring_intensity in SCENARIO_H_MENTORING_INTENSITIES:
+                conditions.append({
+                    "scenario_id": "H",
+                    "condition_id": f"H{condition_index}",
+                    "project_type": project_type,
+                    "team_composition": team_composition,
+                    "mentoring_intensity": mentoring_intensity,
+                })
+                condition_index += 1
+    return conditions
+
+
+def scenario_i_conditions():
+    conditions = []
+    condition_index = 1
+    for project_type in SCENARIO_I_PROJECT_TYPES:
+        for requirement_volatility in SCENARIO_I_REQUIREMENT_VOLATILITY:
+            for pm_profile in SCENARIO_I_PM_PROFILES:
+                conditions.append({
+                    "scenario_id": "I",
+                    "condition_id": f"I{condition_index}",
+                    "project_type": project_type,
+                    "requirement_volatility": requirement_volatility,
+                    "pm_profile": pm_profile,
+                })
+                condition_index += 1
+    return conditions
+
+
+def condition_display_params(condition):
+    display_params = dict(condition)
+    pm_profile = condition.get("pm_profile")
+    if pm_profile in PM_PROFILES:
+        for key, value in PM_PROFILES[pm_profile].items():
+            display_params.setdefault(key, value)
+    return display_params
 
 
 def get_conditions(scenario_id):
@@ -225,11 +328,20 @@ def get_conditions(scenario_id):
         return scenario_d_conditions()
     if scenario_id == "E":
         return scenario_e_conditions()
+    if scenario_id == "F":
+        return scenario_f_conditions()
+    if scenario_id == "G":
+        return scenario_g_conditions()
+    if scenario_id == "H":
+        return scenario_h_conditions()
+    if scenario_id == "I":
+        return scenario_i_conditions()
     raise ValueError(f"Unsupported scenario: {scenario_id}")
 
 
 def run_condition(condition, runs, num_sprints, seed_start, num_developers):
     rows = []
+    display_params = condition_display_params(condition)
     for run_index in range(runs):
         seed = seed_start + run_index
         params = {
@@ -255,7 +367,7 @@ def run_condition(condition, runs, num_sprints, seed_start, num_developers):
             "num_sprints": num_sprints,
         }
         for column in PARAM_COLUMNS:
-            row[column] = condition.get(column, "")
+            row[column] = display_params.get(column, "")
         for metric in METRIC_COLUMNS:
             row[metric] = prism.get(metric, "")
         for metric in INTERNAL_METRIC_COLUMNS:
@@ -310,7 +422,7 @@ def write_summary_csv(path, rows):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run scenario-based ABM experiments.")
-    parser.add_argument("--scenario", default="B", choices=["A", "B", "C", "D", "E"])
+    parser.add_argument("--scenario", default="B", choices=["A", "B", "C", "D", "E", "F", "G", "H", "I"])
     parser.add_argument("--runs", type=int, default=30)
     parser.add_argument("--sprints", type=int, default=6)
     parser.add_argument("--seed-start", type=int, default=1000)

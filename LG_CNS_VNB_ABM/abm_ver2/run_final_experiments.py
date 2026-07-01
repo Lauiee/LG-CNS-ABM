@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run final A/B/C/D/E experiments and preserve their CSV outputs."""
+"""Run final A/B/C/D/E/F/G/H/I experiments and preserve their CSV outputs."""
 from pathlib import Path
 import shutil
 import subprocess
@@ -9,7 +9,7 @@ import sys
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "outputs"
 FINAL_DIR = OUTPUT_DIR / "final"
-SCENARIOS = ("A", "B", "C", "D", "E")
+SCENARIOS = ("A", "B", "C", "D", "E", "F", "G", "H", "I")
 
 
 def require_output(path: Path) -> None:

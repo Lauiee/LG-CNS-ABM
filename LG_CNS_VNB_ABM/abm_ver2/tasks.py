@@ -48,8 +48,17 @@ def _next_id():
     return _task_counter
 
 
-def _random_task_domain() -> str:
-    return random.choice(TASK_DOMAIN_DIST)
+def _random_from_distribution(distribution, default_distribution):
+    source = default_distribution if distribution is None else distribution
+    if isinstance(source, dict):
+        values = list(source.keys())
+        weights = list(source.values())
+        return random.choices(values, weights=weights, k=1)[0]
+    return random.choice(list(source))
+
+
+def _random_task_domain(domain_distribution=None) -> str:
+    return _random_from_distribution(domain_distribution, TASK_DOMAIN_DIST)
 
 
 @dataclass
@@ -67,6 +76,9 @@ class Task:
     is_new_capability: bool = True    # % Time on New Capabilities 계산용
     caused_by_task_id: Optional[int] = None  # rework 원인 태스크
     help_received_count: int = 0
+    rework_count: int = 0
+    rework_reason: Optional[str] = None
+    origin_task_id: Optional[int] = None
 
     @property
     def required_skill(self) -> float:
@@ -95,24 +107,35 @@ class Task:
         return self.progress >= 1.0
 
 
-def create_random_task(step: int, task_type: str = None, incident_priority: str = None) -> Task:
+def create_random_task(
+    step: int,
+    task_type: str = None,
+    incident_priority: str = None,
+    complexity_distribution=None,
+    domain_distribution=None,
+) -> Task:
     t_type = task_type or random.choice(TASK_TYPE_DIST[:75])  # incident 제외
-    complexity = random.choice(COMPLEXITY_DIST)
+    complexity = _random_from_distribution(complexity_distribution, COMPLEXITY_DIST)
     is_new = random.random() < 0.6  # 60%는 신규 기능
     return Task(
         task_type=t_type,
         complexity=complexity,
-        domain=_random_task_domain(),
+        domain=_random_task_domain(domain_distribution),
         status="backlog",
         created_step=step,
         is_new_capability=is_new,
     )
 
 
-def create_incident_task(step: int, priority: str = None, caused_by: int = None) -> Task:
+def create_incident_task(
+    step: int,
+    priority: str = None,
+    caused_by: int = None,
+    domain_distribution=None,
+) -> Task:
     priority = priority or random.choice(INCIDENT_PRIORITY_DIST)
     complexity_map = {"Low": "C1", "Medium": "C2", "High": "C3", "Critical": "C4"}
-    domain = _random_task_domain()
+    domain = _random_task_domain(domain_distribution)
     return Task(
         task_type="incident",
         complexity=complexity_map[priority],

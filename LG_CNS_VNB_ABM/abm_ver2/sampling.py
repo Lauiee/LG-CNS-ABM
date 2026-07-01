@@ -2,6 +2,115 @@ import math
 import random
 
 
+def _clamp(value, low, high):
+    return max(low, min(high, value))
+
+
+def _context_value(context, key, default=None):
+    value = context.get(key, default)
+    return default if value in (None, "") else value
+
+
+def _developer_project_experience_mean(context):
+    role = _context_value(context, "role", "middle")
+    team_composition = _context_value(context, "team_composition")
+    project_type = _context_value(context, "project_type")
+    project_base = {
+        "new_build": 0.45,
+        "maintenance_enhancement": 0.68,
+        "legacy_migration": 0.48,
+        "deadline_driven": 0.52,
+        "quality_critical": 0.72,
+    }.get(project_type, 0.58)
+    role_offset = {"junior": -0.12, "middle": 0.0, "senior": 0.12}.get(role, 0.0)
+    team_offset = {
+        "junior_heavy": -0.06,
+        "balanced": 0.02,
+        "senior_heavy": 0.07,
+    }.get(team_composition, 0.0)
+    return _clamp(project_base + role_offset + team_offset, 0.05, 0.95)
+
+
+def _developer_client_domain_experience_mean(context):
+    role = _context_value(context, "role", "middle")
+    team_composition = _context_value(context, "team_composition")
+    project_type = _context_value(context, "project_type")
+    project_base = {
+        "new_build": 0.42,
+        "maintenance_enhancement": 0.62,
+        "legacy_migration": 0.58,
+        "deadline_driven": 0.48,
+        "quality_critical": 0.70,
+    }.get(project_type, 0.55)
+    role_offset = {"junior": -0.10, "middle": 0.0, "senior": 0.10}.get(role, 0.0)
+    team_offset = {
+        "junior_heavy": -0.05,
+        "balanced": 0.02,
+        "senior_heavy": 0.06,
+    }.get(team_composition, 0.0)
+    return _clamp(project_base + role_offset + team_offset, 0.05, 0.95)
+
+
+def _developer_prior_collaboration_mean(context):
+    role = _context_value(context, "role", "middle")
+    team_composition = _context_value(context, "team_composition")
+    project_type = _context_value(context, "project_type")
+    team_base = {
+        "junior_heavy": 0.46,
+        "balanced": 0.65,
+        "senior_heavy": 0.58,
+    }.get(team_composition, 0.58)
+    project_offset = {
+        "new_build": -0.05,
+        "maintenance_enhancement": 0.04,
+        "legacy_migration": -0.02,
+        "deadline_driven": -0.08,
+        "quality_critical": 0.06,
+    }.get(project_type, 0.0)
+    role_offset = {"junior": -0.03, "middle": 0.0, "senior": 0.03}.get(role, 0.0)
+    return _clamp(team_base + project_offset + role_offset, 0.05, 0.95)
+
+
+def _developer_review_capacity_mean(context):
+    role = _context_value(context, "role", "middle")
+    team_composition = _context_value(context, "team_composition")
+    project_type = _context_value(context, "project_type")
+    role_base = {"junior": 0.55, "middle": 0.85, "senior": 1.15}.get(role, 0.85)
+    team_offset = {
+        "junior_heavy": -0.05,
+        "balanced": 0.02,
+        "senior_heavy": 0.08,
+    }.get(team_composition, 0.0)
+    project_offset = {
+        "new_build": 0.0,
+        "maintenance_enhancement": 0.03,
+        "legacy_migration": -0.02,
+        "deadline_driven": -0.05,
+        "quality_critical": 0.10,
+    }.get(project_type, 0.0)
+    return _clamp(role_base + team_offset + project_offset, 0.20, 1.45)
+
+
+def _developer_mentoring_capacity_mean(context):
+    role = _context_value(context, "role", "middle")
+    team_composition = _context_value(context, "team_composition")
+    project_type = _context_value(context, "project_type")
+    role_base = {"junior": 0.35, "middle": 0.75, "senior": 1.20}.get(role, 0.75)
+    team_offset = {
+        "junior_heavy": -0.08,
+        "balanced": 0.02,
+        "senior_heavy": 0.12,
+    }.get(team_composition, 0.0)
+    project_offset = {
+        "new_build": 0.0,
+        "maintenance_enhancement": 0.05,
+        "legacy_migration": -0.02,
+        "deadline_driven": -0.08,
+        "quality_critical": 0.06,
+    }.get(project_type, 0.0)
+    return _clamp(role_base + team_offset + project_offset, 0.15, 1.50)
+
+
 DEFAULT_DISTRIBUTIONS = {
     "developer.skill_level": {
         "type": "lognormal",
@@ -71,6 +180,41 @@ DEFAULT_DISTRIBUTIONS = {
         "theta": 4.0,
         "low": 0.0,
         "high": 60.0,
+    },
+    "developer.project_experience": {
+        "type": "truncated_normal",
+        "mean": _developer_project_experience_mean,
+        "sd": 0.12,
+        "low": 0.0,
+        "high": 1.0,
+    },
+    "developer.client_domain_experience": {
+        "type": "truncated_normal",
+        "mean": _developer_client_domain_experience_mean,
+        "sd": 0.14,
+        "low": 0.0,
+        "high": 1.0,
+    },
+    "developer.prior_collaboration_score": {
+        "type": "truncated_normal",
+        "mean": _developer_prior_collaboration_mean,
+        "sd": 0.15,
+        "low": 0.0,
+        "high": 1.0,
+    },
+    "developer.review_capacity": {
+        "type": "truncated_normal",
+        "mean": _developer_review_capacity_mean,
+        "sd": 0.14,
+        "low": 0.2,
+        "high": 1.5,
+    },
+    "developer.mentoring_capacity": {
+        "type": "truncated_normal",
+        "mean": _developer_mentoring_capacity_mean,
+        "sd": 0.15,
+        "low": 0.15,
+        "high": 1.5,
     },
     "pl.leadership_style": {
         "type": "uniform",
